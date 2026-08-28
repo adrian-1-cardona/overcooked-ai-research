@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+*.log
+
+# Keep results folder but ignore generated experiment outputs
+overcooked-agent-eval/results/*.csv
+overcooked-agent-eval/results/*.json
+overcooked-agent-eval/results/*.pkl
+!overcooked-agent-eval/results/.gitkeep
