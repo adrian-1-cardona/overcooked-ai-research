@@ -14,6 +14,8 @@ Milestone 1 added the first repeatable baseline experiment. Two random agents pl
 
 Milestone 2A makes the baseline more useful. Instead of just proving the environment runs once, this adds a reusable way to log structured telemetry across multiple episodes. The default run records five random-agent episodes in one consistent CSV schema, which is the first step toward comparing coordination and partner compatibility.
 
+Milestone 2B computes episode summaries from that saved telemetry without rerunning the environment. The summary combines score and deliveries with movement, idle time, teammate blocking, collision attempts, and repeated interference so coordination can be studied alongside performance.
+
 ## Repository structure
 
 - `external/overcooked_ai/` — the upstream Overcooked-AI Git submodule (treated as read-only)
@@ -64,9 +66,17 @@ The default experiment runs five random-agent episodes on `cramped_room`. It pri
 
 This reusable telemetry is important because future metrics and agent comparisons need the same fields across every episode. Each episode records its deterministic seed, and every saved CSV is schema-validated. Repeating the same configuration produces the same telemetry. See `overcooked-agent-eval/telemetry/README.md` for the complete field definitions and use `python experiments/run_multi_episode_baseline.py --help` to change the episode count, layout, horizon, base seed, or output path.
 
+## Summarize performance and coordination
+
+After generating the multi-episode telemetry, run:
+
+```bash
+python experiments/summarize_episode_metrics.py
+```
+
+This reads the existing CSV, prints a short metrics summary, and creates `overcooked-agent-eval/results/multi_episode_random_baseline_cramped_room_episode_metrics.csv` with one row per episode. Metric definitions and limitations are documented in `overcooked-agent-eval/metrics/README.md`.
+
 ## Next steps
 
-- Add core performance and coordination metrics.
-- Add blocking, collision, and interference metrics.
 - Run experiments across multiple layouts.
 - Implement deterministic baseline agents.

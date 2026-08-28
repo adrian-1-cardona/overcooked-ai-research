@@ -49,6 +49,18 @@ For example, this acceptance run writes 10 deterministic episodes:
 python experiments/run_multi_episode_baseline.py --episodes 10
 ```
 
+## Episode performance and coordination metrics
+
+Milestone 2B turns saved telemetry into one comparable summary row per episode. Generate or reuse a telemetry CSV, then run:
+
+```bash
+python experiments/summarize_episode_metrics.py
+```
+
+The command reads the saved random-baseline telemetry without rerunning the environment and creates `results/multi_episode_random_baseline_cramped_room_episode_metrics.csv`. It prints the episode count, team score, soups delivered, blocking events, collision events, interference timesteps, and output path.
+
+The summary includes score, deliveries, episode length, distance traveled, explicit idle time, wall/terrain movement failures, teammate blocking, same-target and swap collisions, and repeated interference. Every row keeps the run and episode IDs needed to join it to the source telemetry. Exact definitions, edge cases, and limitations are documented in [`metrics/README.md`](metrics/README.md).
+
 ## Folder structure
 
 - `agents/` — custom cooperative agent strategies
@@ -61,4 +73,4 @@ python experiments/run_multi_episode_baseline.py --episodes 10
 
 ## Future milestones
 
-Next steps are core performance and coordination metrics, blocking and interference measures, experiments across multiple layouts, and deterministic baseline agents. The framework may later support reinforcement learning, evolutionary methods, or quality-diversity approaches, but the immediate goal is a clean and reliable evaluation foundation.
+Next steps are experiments across multiple layouts and deterministic baseline agents. The framework may later support reinforcement learning, evolutionary methods, or quality-diversity approaches, but the immediate goal is a clean and reliable evaluation foundation.

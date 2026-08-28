@@ -34,6 +34,8 @@ class TelemetryRow:
     agent_0_shaped_reward: float
     agent_1_shaped_reward: float
     done: bool
+    agent_0_previous_position: str
+    agent_1_previous_position: str
     agent_0_position: str
     agent_1_position: str
     agent_0_orientation: str
@@ -52,6 +54,8 @@ class TelemetryRow:
             "agent_1_name": self.agent_1_name,
             "agent_0_action": self.agent_0_action,
             "agent_1_action": self.agent_1_action,
+            "agent_0_previous_position": self.agent_0_previous_position,
+            "agent_1_previous_position": self.agent_1_previous_position,
             "agent_0_position": self.agent_0_position,
             "agent_1_position": self.agent_1_position,
             "agent_0_orientation": self.agent_0_orientation,
@@ -128,6 +132,8 @@ class TelemetryRow:
             if value not in self.ACTIONS:
                 raise ValueError(f"Invalid {name}: {value!r}")
         for name, value in {
+            "agent_0_previous_position": self.agent_0_previous_position,
+            "agent_1_previous_position": self.agent_1_previous_position,
             "agent_0_position": self.agent_0_position,
             "agent_1_position": self.agent_1_position,
         }.items():

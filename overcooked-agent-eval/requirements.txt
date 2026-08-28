@@ -1,2 +1,2 @@
-# Install the checked-out Overcooked-AI submodule and its dependencies.
--e ../external/overcooked_ai
+# Install the checked-out, read-only Overcooked-AI submodule and its dependencies.
+../external/overcooked_ai

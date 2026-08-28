@@ -6,7 +6,7 @@ The telemetry CSV uses one row per environment timestep. This is the stable inpu
 
 - Held objects use `none` when an agent has empty hands.
 - Event fields use an empty string when no event occurred. Multiple events are sorted and separated with semicolons.
-- Positions are JSON coordinates such as `[1, 2]`, which avoids Python-specific tuple syntax.
+- Pre-action and post-action positions are JSON coordinates such as `[1, 2]`, which avoids Python-specific tuple syntax and supports movement metrics.
 - Actions and orientations use `north`, `south`, `east`, `west`, `stay`, or `interact` where applicable.
 - Boolean values are written as `True` or `False`.
 - All fields are required. Event fields are the only fields that may be empty; there is no generic null value.
@@ -32,6 +32,8 @@ The telemetry CSV uses one row per environment timestep. This is the stable inpu
 | `agent_0_shaped_reward` | number | Player 0 timestep reward-shaping value. |
 | `agent_1_shaped_reward` | number | Player 1 timestep reward-shaping value. |
 | `done` | boolean | Whether the episode ended after this timestep. |
+| `agent_0_previous_position` | JSON array | Player 0 `[x, y]` position before the action. |
+| `agent_1_previous_position` | JSON array | Player 1 `[x, y]` position before the action. |
 | `agent_0_position` | JSON array | Player 0 `[x, y]` position after the action. |
 | `agent_1_position` | JSON array | Player 1 `[x, y]` position after the action. |
 | `agent_0_orientation` | string | Player 0 orientation after the action. |
@@ -46,8 +48,8 @@ The telemetry CSV uses one row per environment timestep. This is the stable inpu
 An early timestep with no reward or events is represented like this. The position fields are quoted because their JSON arrays contain commas.
 
 ```csv
-run_id,episode_id,episode_seed,timestep,layout_name,agent_0_id,agent_1_id,agent_0_name,agent_1_name,agent_0_action,agent_1_action,reward,agent_0_sparse_reward,agent_1_sparse_reward,agent_0_shaped_reward,agent_1_shaped_reward,done,agent_0_position,agent_1_position,agent_0_orientation,agent_1_orientation,agent_0_held_object,agent_1_held_object,agent_0_events,agent_1_events
-random-example,1,42,1,cramped_room,0,1,RandomAgent,RandomAgent,north,stay,0,0,0,0,0,False,"[1, 2]","[3, 2]",north,south,none,none,,
+run_id,episode_id,episode_seed,timestep,layout_name,agent_0_id,agent_1_id,agent_0_name,agent_1_name,agent_0_action,agent_1_action,reward,agent_0_sparse_reward,agent_1_sparse_reward,agent_0_shaped_reward,agent_1_shaped_reward,done,agent_0_previous_position,agent_1_previous_position,agent_0_position,agent_1_position,agent_0_orientation,agent_1_orientation,agent_0_held_object,agent_1_held_object,agent_0_events,agent_1_events
+random-example,1,42,1,cramped_room,0,1,RandomAgent,RandomAgent,north,stay,0,0,0,0,0,False,"[1, 3]","[3, 2]","[1, 2]","[3, 2]",north,south,none,none,,
 ```
 
 The runner validates the complete file immediately after saving it, so missing columns or malformed values fail clearly instead of producing silently unreliable data.

@@ -29,6 +29,8 @@ def sample_row() -> TelemetryRow:
         agent_0_shaped_reward=0,
         agent_1_shaped_reward=0,
         done=False,
+        agent_0_previous_position="[1, 3]",
+        agent_1_previous_position="[3, 3]",
         agent_0_position="[1, 2]",
         agent_1_position="[3, 2]",
         agent_0_orientation="north",
@@ -45,7 +47,7 @@ class TelemetryTests(unittest.TestCase):
         row = sample_row().to_dict()
         self.assertEqual(row["layout_name"], "cramped_room")
         self.assertEqual(row["agent_1_held_object"], "onion")
-        self.assertEqual(len(row), 25)
+        self.assertEqual(len(row), 27)
 
     def test_logger_creates_folder_and_writes_csv(self) -> None:
         logger = TelemetryLogger()

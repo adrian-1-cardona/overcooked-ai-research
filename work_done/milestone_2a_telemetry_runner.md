@@ -48,7 +48,7 @@ The CSV includes deterministic run, episode, and player identifiers, the episode
 
 - All 13 telemetry and runner tests passed.
 - The required 10-episode command completed 4,000 timesteps.
-- The saved CSV validated with episodes 1–10, seeds 42–51, and all 25 fields.
+- The saved CSV validated with episodes 1–10, seeds 42–51, and all 27 fields.
 - Repeating the full 10-episode configuration produced a byte-for-byte identical CSV.
 - The original Milestone 1 command still completed 400 timesteps and wrote its legacy CSV.
 
@@ -63,7 +63,5 @@ This completes GitHub issues #4 and #5. The telemetry schema is documented and v
 
 ## Next steps
 
-- Add core performance and coordination metrics.
-- Add blocking and interference metrics.
 - Run experiments across multiple layouts.
 - Start implementing deterministic baseline agents.

@@ -80,7 +80,7 @@ def held_object_name(player: object) -> str:
 def deterministic_run_id(layout: str, episodes: int, horizon: int, seed: int) -> str:
     """Identify a configuration consistently across repeated runs."""
     configuration = {
-        "schema_version": 1,
+        "schema_version": 2,
         "layout": layout,
         "episodes": episodes,
         "horizon": horizon,
@@ -137,6 +137,7 @@ def run_experiment(
             actions_and_info = [agent.action(state) for agent in agents]
             joint_action = tuple(item[0] for item in actions_and_info)
             action_info = [item[1] for item in actions_and_info]
+            previous_players = state.players
             next_state, reward, done, info = env.step(
                 joint_action, joint_agent_action_info=action_info
             )
@@ -162,6 +163,12 @@ def run_experiment(
                     agent_0_shaped_reward=info["shaped_r_by_agent"][0],
                     agent_1_shaped_reward=info["shaped_r_by_agent"][1],
                     done=done,
+                    agent_0_previous_position=json.dumps(
+                        previous_players[0].position
+                    ),
+                    agent_1_previous_position=json.dumps(
+                        previous_players[1].position
+                    ),
                     agent_0_position=json.dumps(players[0].position),
                     agent_1_position=json.dumps(players[1].position),
                     agent_0_orientation=action_name(players[0].orientation),
