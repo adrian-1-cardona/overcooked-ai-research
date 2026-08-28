@@ -29,6 +29,18 @@ The CSV contains the episode number, timestep, each agent’s action, timestep s
 
 Optional settings are available with `python experiments/run_random_baseline.py --help`.
 
+## Multi-episode baseline and telemetry
+
+Milestone 2A makes the baseline more useful. Instead of just proving the environment runs once, this adds a reusable way to log structured telemetry across multiple episodes.
+
+```bash
+python experiments/run_multi_episode_baseline.py
+```
+
+By default, two random agents play five 400-timestep episodes on `cramped_room`. The terminal summary reports the episode count, timesteps logged, average episode length, average reward, and output path. The run creates `results/multi_episode_random_baseline_cramped_room.csv`.
+
+Each CSV row records the run, episode, timestep, layout, agent names, actions, reward, completion status, positions, orientations, and held objects. Keeping this structure consistent gives later coordination metrics and agent-pairing comparisons a clean source of data. Optional settings are available with `python experiments/run_multi_episode_baseline.py --help`.
+
 ## Folder structure
 
 - `agents/` — custom cooperative agent strategies
@@ -41,4 +53,4 @@ Optional settings are available with `python experiments/run_random_baseline.py 
 
 ## Future milestones
 
-Future work will add meaningful baseline strategies, coordination metrics, experiments across layouts and pairings, and partner compatibility analysis. The framework may later support reinforcement learning, evolutionary methods, or quality-diversity approaches, but the immediate goal is a clean and reliable evaluation foundation.
+Next steps are core performance and coordination metrics, blocking and interference measures, experiments across multiple layouts, and deterministic baseline agents. The framework may later support reinforcement learning, evolutionary methods, or quality-diversity approaches, but the immediate goal is a clean and reliable evaluation foundation.

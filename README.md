@@ -10,7 +10,9 @@ Overcooked-AI is useful for this work because two agents have to share space, di
 
 ## Current status
 
-Milestone 1 adds the first repeatable baseline experiment. Two random agents play one episode of `cramped_room`, and the script records their actions and rewards at every timestep. Before I try to build smarter agents, I need to make sure I can run the environment and collect useful data reliably.
+Milestone 1 added the first repeatable baseline experiment. Two random agents play one episode of `cramped_room`, and the script records their actions and rewards at every timestep.
+
+Milestone 2A makes the baseline more useful. Instead of just proving the environment runs once, this adds a reusable way to log structured telemetry across multiple episodes. The default run records five random-agent episodes in one consistent CSV schema, which is the first step toward comparing coordination and partner compatibility.
 
 ## Repository structure
 
@@ -50,9 +52,21 @@ The terminal prints the layout, episode length, total sparse reward, number of l
 
 The default run uses one 400-timestep episode and a fixed random seed. Use `python experiments/run_random_baseline.py --help` to see options for the layout, horizon, seed, and output path.
 
+## Run Milestone 2A
+
+From `overcooked-agent-eval/`, run:
+
+```bash
+python experiments/run_multi_episode_baseline.py
+```
+
+The default experiment runs five random-agent episodes on `cramped_room`. It prints the episode count, total timesteps, average episode length, average score, and output path. Structured per-timestep telemetry is saved to `overcooked-agent-eval/results/multi_episode_random_baseline_cramped_room.csv`.
+
+This reusable telemetry is important because future metrics and agent comparisons need the same fields across every episode. Use `python experiments/run_multi_episode_baseline.py --help` to change the episode count, layout, horizon, seed, or output path.
+
 ## Next steps
 
-- Add more meaningful rule-based baseline agents.
-- Add coordination metrics such as idle time, blocking, and role specialization.
-- Compare agent pairings across different layouts.
-- Move toward evaluating partner compatibility instead of score alone.
+- Add core performance and coordination metrics.
+- Add blocking, collision, and interference metrics.
+- Run experiments across multiple layouts.
+- Implement deterministic baseline agents.
