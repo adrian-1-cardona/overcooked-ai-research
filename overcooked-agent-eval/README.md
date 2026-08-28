@@ -1,26 +1,44 @@
 # Overcooked Agent Evaluation Framework
 
-This folder contains my custom software framework for evaluating cooperative AI agents in Overcooked-AI.
+This folder contains my custom framework for evaluating cooperative AI agents. The upstream Overcooked-AI environment lives in `../external/overcooked_ai` as a Git submodule and should be treated as read-only. Custom agents, experiments, telemetry, metrics, tests, and analysis should be added here.
 
-## Goal
+## Setup
 
-Build a modular system for running agent pairings, collecting telemetry, computing coordination metrics, and comparing cooperative strategies across layouts.
+Overcooked-AI currently requires Python 3.10.
 
-## MVP
+```bash
+python3.10 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-- Run Overcooked-AI layouts
-- Implement baseline agents
-- Run repeatable experiments
-- Log trajectory and score data
-- Generate comparison metrics and visualizations
+Run `git submodule update --init --recursive` from the repository root first if `../external/overcooked_ai` is empty.
 
-## Planned Components
+## Random baseline experiment
 
-- `agents/` - Custom cooperative agent strategies
-- `experiments/` - Scripts for running agent pairings
-- `telemetry/` - Logging game states, actions, rewards, and events
-- `metrics/` - Coordination and performance metrics
-- `results/` - Experiment outputs
-- `notebooks/` - Data analysis
-- `dashboard/` - Optional visualization dashboard
-- `tests/` - Unit tests
+The first milestone runs two built-in random agents on `cramped_room`. Both agents sample from every available action, including `interact`, using a fixed seed so the run can be repeated.
+
+```bash
+python experiments/run_random_baseline.py
+```
+
+The script prints a short summary and creates `results/random_baseline_cramped_room.csv`.
+
+The CSV contains the episode number, timestep, each agent’s action, timestep sparse reward, per-agent shaped rewards, cumulative sparse reward, and both player positions. Generated CSV files are ignored by Git, so running the experiment does not add result data to a commit by default.
+
+Optional settings are available with `python experiments/run_random_baseline.py --help`.
+
+## Folder structure
+
+- `agents/` — custom cooperative agent strategies
+- `experiments/` — repeatable experiment runners
+- `metrics/` — coordination and performance metrics
+- `results/` — generated experiment output
+- `notebooks/` — exploratory analysis
+- `dashboard/` — future visualization tools
+- `tests/` — automated checks
+
+## Future milestones
+
+Future work will add meaningful baseline strategies, coordination metrics, experiments across layouts and pairings, and partner compatibility analysis. The framework may later support reinforcement learning, evolutionary methods, or quality-diversity approaches, but the immediate goal is a clean and reliable evaluation foundation.
