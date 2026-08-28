@@ -39,7 +39,15 @@ python experiments/run_multi_episode_baseline.py
 
 By default, two random agents play five 400-timestep episodes on `cramped_room`. The terminal summary reports the episode count, timesteps logged, average episode length, average reward, and output path. The run creates `results/multi_episode_random_baseline_cramped_room.csv`.
 
-Each CSV row records the run, episode, timestep, layout, agent names, actions, reward, completion status, positions, orientations, and held objects. Keeping this structure consistent gives later coordination metrics and agent-pairing comparisons a clean source of data. Optional settings are available with `python experiments/run_multi_episode_baseline.py --help`.
+Each CSV row records the deterministic run ID, episode ID and seed, timestep, layout, player IDs, agent names, actions, sparse and shaped rewards, completion status, positions, orientations, held objects, and Overcooked events. The runner validates the complete CSV after saving it. The full field and missing-value definitions are in [`telemetry/README.md`](telemetry/README.md).
+
+The base seed defaults to `42`, and episode seeds increase from that value (`42`, `43`, and so on). Repeating the same configuration produces the same run ID, actions, states, rewards, and CSV contents. A different layout automatically gets a different output filename. Use `--base-seed` to choose the first episode seed; `--seed` remains available as a shorter alias. Optional settings are available with `python experiments/run_multi_episode_baseline.py --help`.
+
+For example, this acceptance run writes 10 deterministic episodes:
+
+```bash
+python experiments/run_multi_episode_baseline.py --episodes 10
+```
 
 ## Folder structure
 

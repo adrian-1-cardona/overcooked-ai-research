@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
+import sys
 from pathlib import Path
-
-import numpy as np
-
-from overcooked_ai_py.agents.agent import RandomAgent
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-
 
 DEFAULT_LAYOUT = "cramped_room"
 DEFAULT_HORIZON = 400
 DEFAULT_SEED = 42
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from experiments.run_multi_episode_baseline import run_experiment
+
+
 DEFAULT_OUTPUT = PROJECT_ROOT / "results" / "random_baseline_cramped_room.csv"
 
 
@@ -34,58 +35,32 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def action_name(action: object) -> str:
-    """Return a readable, ASCII-safe name for an Overcooked action."""
-    names = {
-        (0, -1): "north",
-        (0, 1): "south",
-        (1, 0): "east",
-        (-1, 0): "west",
-        (0, 0): "stay",
-        "interact": "interact",
-    }
-    return names[action]
-
-
 def run_episode(layout: str, horizon: int, seed: int) -> list[dict[str, object]]:
-    """Run one episode and return per-timestep telemetry rows."""
-    np.random.seed(seed)
-    mdp = OvercookedGridworld.from_layout_name(layout)
-    env = OvercookedEnv.from_mdp(mdp, horizon=horizon, info_level=0)
-    agents = [RandomAgent(all_actions=True), RandomAgent(all_actions=True)]
-    for index, agent in enumerate(agents):
-        agent.set_agent_index(index)
-        agent.set_mdp(mdp)
-
-    state = env.state
-    done = False
+    """Run one episode through the reusable runner and keep the legacy CSV shape."""
+    logger, _, _ = run_experiment(layout, episodes=1, horizon=horizon, seed=seed)
     cumulative_sparse_reward = 0
     rows: list[dict[str, object]] = []
-
-    while not done:
-        actions_and_info = [agent.action(state) for agent in agents]
-        joint_action = tuple(item[0] for item in actions_and_info)
-        action_info = [item[1] for item in actions_and_info]
-        next_state, sparse_reward, done, info = env.step(
-            joint_action, joint_agent_action_info=action_info
-        )
-        cumulative_sparse_reward += sparse_reward
+    for telemetry_row in logger.rows:
+        cumulative_sparse_reward += telemetry_row.reward
         rows.append(
             {
                 "episode": 1,
-                "timestep": next_state.timestep,
-                "agent_0_action": action_name(joint_action[0]),
-                "agent_1_action": action_name(joint_action[1]),
-                "sparse_reward": sparse_reward,
-                "agent_0_shaped_reward": info["shaped_r_by_agent"][0],
-                "agent_1_shaped_reward": info["shaped_r_by_agent"][1],
+                "timestep": telemetry_row.timestep,
+                "agent_0_action": telemetry_row.agent_0_action,
+                "agent_1_action": telemetry_row.agent_1_action,
+                "sparse_reward": telemetry_row.reward,
+                "agent_0_shaped_reward": telemetry_row.agent_0_shaped_reward,
+                "agent_1_shaped_reward": telemetry_row.agent_1_shaped_reward,
                 "cumulative_sparse_reward": cumulative_sparse_reward,
-                "agent_0_position": repr(next_state.players[0].position),
-                "agent_1_position": repr(next_state.players[1].position),
-                "done": done,
+                "agent_0_position": repr(
+                    tuple(json.loads(telemetry_row.agent_0_position))
+                ),
+                "agent_1_position": repr(
+                    tuple(json.loads(telemetry_row.agent_1_position))
+                ),
+                "done": telemetry_row.done,
             }
         )
-        state = next_state
 
     return rows
 

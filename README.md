@@ -62,7 +62,7 @@ python experiments/run_multi_episode_baseline.py
 
 The default experiment runs five random-agent episodes on `cramped_room`. It prints the episode count, total timesteps, average episode length, average score, and output path. Structured per-timestep telemetry is saved to `overcooked-agent-eval/results/multi_episode_random_baseline_cramped_room.csv`.
 
-This reusable telemetry is important because future metrics and agent comparisons need the same fields across every episode. Use `python experiments/run_multi_episode_baseline.py --help` to change the episode count, layout, horizon, seed, or output path.
+This reusable telemetry is important because future metrics and agent comparisons need the same fields across every episode. Each episode records its deterministic seed, and every saved CSV is schema-validated. Repeating the same configuration produces the same telemetry. See `overcooked-agent-eval/telemetry/README.md` for the complete field definitions and use `python experiments/run_multi_episode_baseline.py --help` to change the episode count, layout, horizon, base seed, or output path.
 
 ## Next steps
 

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from uuid import uuid4
 
 import numpy as np
 
@@ -24,23 +26,37 @@ DEFAULT_LAYOUT = "cramped_room"
 DEFAULT_EPISODES = 5
 DEFAULT_HORIZON = 400
 DEFAULT_SEED = 42
-DEFAULT_OUTPUT = PROJECT_ROOT / "results" / "multi_episode_random_baseline_cramped_room.csv"
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run multiple random-agent episodes and save structured telemetry."
     )
     parser.add_argument("--layout", default=DEFAULT_LAYOUT)
     parser.add_argument("--episodes", type=int, default=DEFAULT_EPISODES)
     parser.add_argument("--horizon", type=int, default=DEFAULT_HORIZON)
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
+    parser.add_argument(
+        "--base-seed",
+        "--seed",
+        dest="base_seed",
+        type=int,
+        default=DEFAULT_SEED,
+        help="seed for episode 1; later episode seeds increment by one",
+    )
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args(argv)
     if args.episodes < 1:
         parser.error("--episodes must be at least 1")
     if args.horizon < 1:
         parser.error("--horizon must be at least 1")
+    if args.base_seed < 0:
+        parser.error("--base-seed cannot be negative")
+    if args.output is None:
+        args.output = (
+            PROJECT_ROOT
+            / "results"
+            / f"multi_episode_random_baseline_{args.layout}.csv"
+        )
     return args
 
 
@@ -61,18 +77,51 @@ def held_object_name(player: object) -> str:
     return "none" if held_object is None else held_object.name
 
 
+def deterministic_run_id(layout: str, episodes: int, horizon: int, seed: int) -> str:
+    """Identify a configuration consistently across repeated runs."""
+    configuration = {
+        "schema_version": 1,
+        "layout": layout,
+        "episodes": episodes,
+        "horizon": horizon,
+        "base_seed": seed,
+        "agents": ["RandomAgent", "RandomAgent"],
+    }
+    digest = hashlib.sha256(
+        json.dumps(configuration, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"random-{digest}"
+
+
+def events_at_timestep(
+    game_stats: dict[str, object], timestep: int, agent_index: int
+) -> str:
+    """Return a stable semicolon-separated list of events for one agent."""
+    excluded = {
+        "cumulative_sparse_rewards_by_agent",
+        "cumulative_shaped_rewards_by_agent",
+    }
+    events = [
+        event_name
+        for event_name, timestamps_by_agent in game_stats.items()
+        if event_name not in excluded and timestep in timestamps_by_agent[agent_index]
+    ]
+    return ";".join(sorted(events))
+
+
 def run_experiment(
     layout: str, episodes: int, horizon: int, seed: int
 ) -> tuple[TelemetryLogger, list[float], list[int]]:
     """Run the requested episodes and return telemetry and episode summaries."""
-    np.random.seed(seed)
     mdp = OvercookedGridworld.from_layout_name(layout)
     logger = TelemetryLogger()
     episode_rewards: list[float] = []
     episode_lengths: list[int] = []
-    run_id = uuid4().hex
+    run_id = deterministic_run_id(layout, episodes, horizon, seed)
 
     for episode_id in range(1, episodes + 1):
+        episode_seed = seed + episode_id - 1
+        np.random.seed(episode_seed)
         env = OvercookedEnv.from_mdp(mdp, horizon=horizon, info_level=0)
         agents = [RandomAgent(all_actions=True), RandomAgent(all_actions=True)]
         for index, agent in enumerate(agents):
@@ -88,7 +137,7 @@ def run_experiment(
             actions_and_info = [agent.action(state) for agent in agents]
             joint_action = tuple(item[0] for item in actions_and_info)
             action_info = [item[1] for item in actions_and_info]
-            next_state, reward, done, _ = env.step(
+            next_state, reward, done, info = env.step(
                 joint_action, joint_agent_action_info=action_info
             )
             episode_reward += reward
@@ -98,20 +147,33 @@ def run_experiment(
                 TelemetryRow(
                     run_id=run_id,
                     episode_id=episode_id,
+                    episode_seed=episode_seed,
                     timestep=next_state.timestep,
                     layout_name=layout,
+                    agent_0_id=0,
+                    agent_1_id=1,
                     agent_0_name="RandomAgent",
                     agent_1_name="RandomAgent",
                     agent_0_action=action_name(joint_action[0]),
                     agent_1_action=action_name(joint_action[1]),
                     reward=reward,
+                    agent_0_sparse_reward=info["sparse_r_by_agent"][0],
+                    agent_1_sparse_reward=info["sparse_r_by_agent"][1],
+                    agent_0_shaped_reward=info["shaped_r_by_agent"][0],
+                    agent_1_shaped_reward=info["shaped_r_by_agent"][1],
                     done=done,
-                    agent_0_position=repr(players[0].position),
-                    agent_1_position=repr(players[1].position),
+                    agent_0_position=json.dumps(players[0].position),
+                    agent_1_position=json.dumps(players[1].position),
                     agent_0_orientation=action_name(players[0].orientation),
                     agent_1_orientation=action_name(players[1].orientation),
                     agent_0_held_object=held_object_name(players[0]),
                     agent_1_held_object=held_object_name(players[1]),
+                    agent_0_events=events_at_timestep(
+                        env.game_stats, next_state.timestep - 1, 0
+                    ),
+                    agent_1_events=events_at_timestep(
+                        env.game_stats, next_state.timestep - 1, 1
+                    ),
                 )
             )
             state = next_state
@@ -142,9 +204,12 @@ def print_summary(
 def main() -> None:
     args = parse_args()
     logger, rewards, lengths = run_experiment(
-        args.layout, args.episodes, args.horizon, args.seed
+        args.layout, args.episodes, args.horizon, args.base_seed
     )
     output_path = logger.save_csv(args.output)
+    validated_rows = logger.validate_csv(output_path)
+    if validated_rows != len(logger.rows):
+        raise RuntimeError("Saved telemetry row count does not match the experiment")
     print_summary(args.layout, rewards, lengths, output_path)
 
 
