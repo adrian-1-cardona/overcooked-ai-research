@@ -44,10 +44,20 @@ git submodule update --init --recursive
 
 ## Run Milestone 1
 
-From `overcooked-agent-eval/`, run:
+From `overcooked-agent-eval/`, run with the venv active:
+
+```bash
+source .venv/bin/activate
+```
 
 ```bash
 python experiments/run_random_baseline.py
+```
+
+Or call the venv's Python directly without activating:
+
+```bash
+.venv/bin/python experiments/run_random_baseline.py
 ```
 
 The terminal prints the layout, episode length, total sparse reward, number of logged timesteps, and output path. The detailed timestep log is written to `overcooked-agent-eval/results/random_baseline_cramped_room.csv`.
@@ -56,10 +66,20 @@ The default run uses one 400-timestep episode and a fixed random seed. Use `pyth
 
 ## Run Milestone 2A
 
-From `overcooked-agent-eval/`, run:
+From `overcooked-agent-eval/`, run with the venv active:
+
+```bash
+source .venv/bin/activate
+```
 
 ```bash
 python experiments/run_multi_episode_baseline.py
+```
+
+Or call the venv's Python directly without activating:
+
+```bash
+.venv/bin/python experiments/run_multi_episode_baseline.py
 ```
 
 The default experiment runs five random-agent episodes on `cramped_room`. It prints the episode count, total timesteps, average episode length, average score, and output path. Structured per-timestep telemetry is saved to `overcooked-agent-eval/results/multi_episode_random_baseline_cramped_room.csv`.
@@ -68,10 +88,20 @@ This reusable telemetry is important because future metrics and agent comparison
 
 ## Summarize performance and coordination
 
-After generating the multi-episode telemetry, run:
+After generating the multi-episode telemetry, run with the venv active:
+
+```bash
+source .venv/bin/activate
+```
 
 ```bash
 python experiments/summarize_episode_metrics.py
+```
+
+Or call the venv's Python directly without activating:
+
+```bash
+.venv/bin/python experiments/summarize_episode_metrics.py
 ```
 
 This reads the existing CSV, prints a short metrics summary, and creates `overcooked-agent-eval/results/multi_episode_random_baseline_cramped_room_episode_metrics.csv` with one row per episode. Metric definitions and limitations are documented in `overcooked-agent-eval/metrics/README.md`.
