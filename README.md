@@ -32,6 +32,26 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+> **Important:** All `python` commands must be run with the virtual environment active. If you open a new terminal, re-activate it first from inside `overcooked-agent-eval/`:
+>
+> ```bash
+> source .venv/bin/activate
+> ```
+>
+> Then run your script as normal:
+>
+> ```bash
+> python experiments/run_random_baseline.py
+> ```
+>
+> Or skip activation and call the venv's Python directly:
+>
+> ```bash
+> .venv/bin/python experiments/run_random_baseline.py
+> ```
+>
+> Running the system `python` without activating the venv will cause `ModuleNotFoundError: No module named 'overcooked_ai_py'`.
+
 If the repo was cloned without submodules, initialize them from the repository root first:
 
 ```bash
