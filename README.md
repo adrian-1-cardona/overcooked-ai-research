@@ -60,7 +60,7 @@ git submodule update --init --recursive
 
 ## Run Milestone 1
 
-From `overcooked-agent-eval/`, run:
+From `overcooked-agent-eval/`, run the random baseline experiment:
 
 ```bash
 python experiments/run_random_baseline.py
@@ -69,6 +69,20 @@ python experiments/run_random_baseline.py
 The terminal prints the layout, episode length, total sparse reward, number of logged timesteps, and output path. The detailed timestep log is written to `overcooked-agent-eval/results/random_baseline_cramped_room.csv`.
 
 The default run uses one 400-timestep episode and a fixed random seed. Use `python experiments/run_random_baseline.py --help` to see options for the layout, horizon, seed, and output path.
+
+Then summarise the results:
+
+```bash
+python experiments/summarize_episode_metrics.py
+```
+
+This reads every CSV in `results/` and prints a formatted breakdown to the terminal. For a single-episode file it shows total score, shaped rewards per agent, and episode length. For multi-episode files it adds mean, std, min, and max across all episodes, covering score, movement distance, idle rate, wall collisions, teammate-blocking events, and interference rate.
+
+You can also point it at a specific file:
+
+```bash
+python experiments/summarize_episode_metrics.py results/multi_episode_random_baseline_cramped_room_episode_metrics.csv
+```
 
 ## Next steps
 
