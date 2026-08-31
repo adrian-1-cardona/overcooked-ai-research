@@ -1,6 +1,6 @@
 # Overcooked-AI Research Workspace
 
-This repo contains my senior project research on cooperative AI agents in Overcooked-AI. The goal is to build a reusable, scientific evaluation framework for running agents, collecting structured telemetry, measuring coordination quality, identifying failure modes, and studying partner compatibility across different cooperative strategies.
+This repository contains my senior project research on cooperative AI agents in Overcooked-AI. The goal is to build a reusable, scientific evaluation framework for running agents, collecting structured telemetry, measuring coordination quality, identifying failure modes, and studying partner compatibility across different cooperative strategies.
 
 ---
 
@@ -40,87 +40,108 @@ Overcooked-AI requires two agents to share physical space, coordinate subtasks (
 
 ---
 
-## Setup
+## Setup & Installation
 
 Overcooked-AI requires **Python 3.10**.
 
 ```bash
+# 1. Clone the repo and submodules
 git clone --recurse-submodules https://github.com/adrian-1-cardona/overcooked-ai-research.git
+
+# 2. Enter the evaluation directory and create the Python 3.10 virtual environment
 cd overcooked-ai-research/overcooked-agent-eval
 python3.10 -m venv .venv
+
+# 3. Activate the virtual environment
 source .venv/bin/activate
+
+# 4. Install dependencies and the Overcooked-AI submodule
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
 > [!IMPORTANT]
-> All `python` commands must be executed with the virtual environment active. In a new terminal, activate it first:
+> All `python` commands must be executed with the virtual environment active. Whenever you open a new terminal:
 > ```bash
+> cd overcooked-agent-eval
 > source .venv/bin/activate
 > ```
-> Alternatively, invoke the environment's Python binary directly:
+> Alternatively, you can call the environment's Python directly:
 > ```bash
-> .venv/bin/python experiments/run_multi_episode_baseline.py
+> .venv/bin/python experiments/run_random_baseline.py
 > ```
-
-If cloned without submodules, initialize them from the repository root:
-```bash
-git submodule update --init --recursive
-```
 
 ---
 
-## Running Experiments
+## Step-by-Step Guide: How to Run Each Milestone
 
-### 1. Milestone 1: Single-Episode Baseline
+Below are the exact commands to run through each milestone, whether working on this PR branch or after merging into `main`.
 
-Run a single-episode baseline on `cramped_room`:
+### Step 1: Milestone 1 — Run the Single-Episode Random Baseline
+
+Runs one 400-step episode of two random agents on `cramped_room`:
+
 ```bash
 python experiments/run_random_baseline.py
 ```
-Output: `results/random_baseline_cramped_room.csv`.
+- **What it does:** Runs 1 episode and writes per-step actions and rewards to `results/random_baseline_cramped_room.csv`.
 
 ---
 
-### 2. Milestone 2: Multi-Episode & Multi-Layout Experiments
+### Step 2: Milestone 2 — Run the Multi-Episode Experiment Runner
 
-Run repeatable seeded batches across single or multiple layouts:
+Runs a seeded batch of 5 reproducible episodes on `cramped_room`:
 
 ```bash
-# Run 5 episodes on default cramped_room
 python experiments/run_multi_episode_baseline.py
+```
+- **What it does:** 
+  - Runs 5 games (seeds 42 to 46).
+  - Logs 27 validated fields per step to `results/multi_episode_random_baseline_cramped_room.csv`.
+  - Saves a companion recipe manifest to `results/multi_episode_random_baseline_cramped_room.manifest.json`.
 
-# Run 10 episodes across multiple layouts
+---
+
+### Step 3: Milestone 2 — Run Experiments Across Multiple Layouts
+
+Runs experiments across several different Overcooked-AI kitchen maps with one command:
+
+```bash
 python experiments/run_multi_episode_baseline.py --layouts cramped_room asymmetric_advantages coordination_ring --episodes 10
 ```
-
-Each run generates:
-- Structured per-timestep telemetry: `results/multi_episode_random_baseline_<layout>.csv`
-- Companion reproducibility manifest: `results/multi_episode_random_baseline_<layout>.manifest.json`
+- **What it does:** 
+  - Pre-validates map names before starting.
+  - Runs 10 episodes for each layout.
+  - Generates distinct CSV and JSON manifest files for each layout in `results/`.
 
 ---
 
-### 3. Milestone 2: Summarize Performance & Coordination
+### Step 4: Milestone 2 — Compute & Summarize Coordination, Role Proxies, & Duplication
 
-Compute episode-level performance, coordination, role proxies, duplication metrics, and batch aggregates:
+Analyzes saved telemetry to compute 68 episode metrics and statistical batch summaries:
 
 ```bash
-# Summarise all CSVs in results/
+# Summarize all results in results/
 python experiments/summarize_episode_metrics.py
 
-# Process a specific telemetry CSV and generate episode metrics CSV
+# Or process a specific multi-episode telemetry file:
 python experiments/summarize_episode_metrics.py results/multi_episode_random_baseline_cramped_room.csv
 ```
-
-Outputs:
-- Per-episode metrics: `results/multi_episode_random_baseline_<layout>_episode_metrics.csv`
-- Formatted summary tables to stdout (Sample size $N$, Mean, Std, Min, Max)
+- **What it does:**
+  - Computes `results/multi_episode_random_baseline_cramped_room_episode_metrics.csv` containing 68 metrics per game.
+  - Prints clean terminal tables showing Average (mean), Variation (std), Min, Max, and Sample Size ($N$) for:
+    - **Team Performance:** Score, soups delivered, episode length.
+    - **Movement & Idle:** Distance walked, explicit idle time and rates.
+    - **Collisions & Blocking:** Wall bumps, teammate blocking, same-target collisions, swaps, repeated interference.
+    - **Role Proxies:** Held-object time-shares (summing to 100%), ingredient potting counts, dish/soup pickups, soup deliveries.
+    - **Task Duplication & Pipeline:** Redundant gathering/dishing/delivering, unused pipeline timesteps.
 
 ---
 
-## Testing
+### Step 5: Run the Automated Test Suite
 
-Run the automated test suite from `overcooked-agent-eval/`:
+Runs all 30 unit tests covering schema validation, deterministic seeding, multi-layout execution, manifests, and metrics:
+
 ```bash
 python -m unittest discover -s tests
 ```

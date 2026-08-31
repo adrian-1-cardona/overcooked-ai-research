@@ -16,32 +16,32 @@ python -m pip install -r requirements.txt
 ```
 
 > [!IMPORTANT]
-> Make sure `.venv` is activated before executing any experiments or test commands.
+> Make sure `.venv` is activated before executing any experiment or test commands.
 
 ---
 
-## Experiments & Tools
+## Step-by-Step Guide: How to Run Each Milestone
 
-### 1. Single-Episode Random Baseline (Milestone 1)
+### 1. Milestone 1 — Single-Episode Random Baseline
 
 Runs two built-in random agents on `cramped_room` for 400 steps:
 
 ```bash
 python experiments/run_random_baseline.py
 ```
-Output: `results/random_baseline_cramped_room.csv`
+- **Output:** `results/random_baseline_cramped_room.csv`
 
 ---
 
-### 2. Multi-Episode & Multi-Layout Experiments (Milestone 2)
+### 2. Milestone 2 — Multi-Episode & Multi-Layout Experiments
 
-Runs repeatable seeded batches with structured telemetry logging across single or multiple layouts:
+Runs repeatable seeded batches with structured telemetry logging across single or multiple kitchen layouts:
 
 ```bash
 # Default run: 5 episodes on cramped_room
 python experiments/run_multi_episode_baseline.py
 
-# Multi-layout run: 10 episodes on 3 layouts
+# Multi-layout run: 10 episodes across cramped_room, asymmetric_advantages, and coordination_ring
 python experiments/run_multi_episode_baseline.py --layouts cramped_room asymmetric_advantages coordination_ring --episodes 10
 ```
 
@@ -58,7 +58,7 @@ Outputs generated per layout:
 
 ---
 
-### 3. Performance & Coordination Summarizer (Milestone 2)
+### 3. Milestone 2 — Performance & Coordination Summarizer
 
 `summarize_episode_metrics.py` reads telemetry CSVs, computes 68-field per-episode performance and coordination metrics, and prints batch aggregate statistics:
 
@@ -84,6 +84,15 @@ Outputs:
 
 ---
 
+### 4. Running Automated Tests
+
+Execute the full test suite with:
+```bash
+python -m unittest discover -s tests
+```
+
+---
+
 ## File Formats & Documentation
 
 - **[`telemetry/README.md`](telemetry/README.md):** 27-field per-timestep telemetry schema and JSON reproducibility manifest specification.
@@ -99,12 +108,3 @@ Outputs:
 - `telemetry/` — Validated telemetry logging and reproducibility manifests.
 - `results/` — Generated experiment outputs (ignored by git).
 - `tests/` — Automated test suite.
-
----
-
-## Testing
-
-Execute all unit tests with:
-```bash
-python -m unittest discover -s tests
-```
