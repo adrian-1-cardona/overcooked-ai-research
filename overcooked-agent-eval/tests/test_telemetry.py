@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from telemetry import TelemetryLogger, TelemetryRow
+from telemetry import (
+    BatchManifest,
+    TelemetryLogger,
+    TelemetryRow,
+    create_batch_manifest,
+    load_batch_manifest,
+    save_batch_manifest,
+)
 
 
 def sample_row() -> TelemetryRow:
@@ -103,6 +111,31 @@ class TelemetryTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "CSV line 2"):
                 TelemetryLogger.validate_csv(output)
+
+    def test_batch_manifest_creation_and_roundtrip(self) -> None:
+        manifest = create_batch_manifest(
+            run_id="test-run-123",
+            layout="cramped_room",
+            agent_0_name="RandomAgent",
+            agent_1_name="RandomAgent",
+            episodes=3,
+            horizon=100,
+            base_seed=42,
+            output_telemetry_path="results/test.csv",
+        )
+        self.assertEqual(manifest.run_id, "test-run-123")
+        self.assertEqual(manifest.episode_seeds, [42, 43, 44])
+        self.assertEqual(manifest.schema_version, 2)
+        self.assertNotEqual(manifest.python_version, "")
+        self.assertNotEqual(manifest.evaluation_commit, "")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = Path(temp_dir) / "test.manifest.json"
+            save_batch_manifest(manifest, manifest_path)
+            self.assertTrue(manifest_path.exists())
+
+            loaded = load_batch_manifest(manifest_path)
+            self.assertEqual(loaded, manifest)
 
 
 if __name__ == "__main__":

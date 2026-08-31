@@ -1,6 +1,10 @@
-# Telemetry schema
+# Telemetry Schema and Reproducibility Manifest
 
 The telemetry CSV uses one row per environment timestep. This is the stable input format for future metrics and analysis code. `TelemetryRow` validates values while the experiment runs, and `TelemetryLogger.validate_csv()` validates the saved header and every saved row.
+
+In addition, every experiment run writes a companion JSON reproducibility manifest (`*.manifest.json`) recording the complete execution environment, parameters, seeds, and version metadata (Issue #14).
+
+---
 
 ## Missing values and encoding
 
@@ -11,7 +15,9 @@ The telemetry CSV uses one row per environment timestep. This is the stable inpu
 - Boolean values are written as `True` or `False`.
 - All fields are required. Event fields are the only fields that may be empty; there is no generic null value.
 
-## Field reference
+---
+
+## Telemetry Field Reference (27 Fields)
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -43,9 +49,34 @@ The telemetry CSV uses one row per environment timestep. This is the stable inpu
 | `agent_0_events` | string | Semicolon-separated Overcooked events attributed to player 0. |
 | `agent_1_events` | string | Semicolon-separated Overcooked events attributed to player 1. |
 
-## Small CSV example
+---
 
-An early timestep with no reward or events is represented like this. The position fields are quoted because their JSON arrays contain commas.
+## Reproducibility Manifest Format (Issue #14)
+
+Beside every telemetry CSV, a JSON manifest is generated:
+
+```json
+{
+  "agent_0_name": "RandomAgent",
+  "agent_1_name": "RandomAgent",
+  "base_seed": 42,
+  "created_at": "2026-08-31T22:45:00.000000+00:00",
+  "episode_seeds": [42, 43, 44, 45, 46],
+  "episodes": 5,
+  "evaluation_commit": "7d80d183f5abb4eb6f7867668653a087a1784458",
+  "horizon": 400,
+  "layout": "cramped_room",
+  "output_telemetry_file": "results/multi_episode_random_baseline_cramped_room.csv",
+  "overcooked_ai_version": "submodule-739950a079cdaed5a44fcc662efc40244c205d06",
+  "python_version": "3.10.21",
+  "run_id": "random-a1b2c3d4e5f60718",
+  "schema_version": 2
+}
+```
+
+---
+
+## Telemetry CSV Example
 
 ```csv
 run_id,episode_id,episode_seed,timestep,layout_name,agent_0_id,agent_1_id,agent_0_name,agent_1_name,agent_0_action,agent_1_action,reward,agent_0_sparse_reward,agent_1_sparse_reward,agent_0_shaped_reward,agent_1_shaped_reward,done,agent_0_previous_position,agent_1_previous_position,agent_0_position,agent_1_position,agent_0_orientation,agent_1_orientation,agent_0_held_object,agent_1_held_object,agent_0_events,agent_1_events

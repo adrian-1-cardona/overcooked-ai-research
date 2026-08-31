@@ -1,10 +1,12 @@
 # Overcooked Agent Evaluation Framework
 
-This folder contains my custom framework for evaluating cooperative AI agents. The upstream Overcooked-AI environment lives in `../external/overcooked_ai` as a Git submodule and should be treated as read-only. Custom agents, experiments, telemetry, metrics, tests, and analysis should be added here.
+This folder contains the custom evaluation and experimentation framework for cooperative AI agents in Overcooked-AI. The upstream Overcooked-AI environment is in `../external/overcooked_ai` as a Git submodule and remains completely read-only.
+
+---
 
 ## Setup
 
-Overcooked-AI currently requires Python 3.10.
+Overcooked-AI requires **Python 3.10**.
 
 ```bash
 python3.10 -m venv .venv
@@ -13,64 +15,96 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Run `git submodule update --init --recursive` from the repository root first if `../external/overcooked_ai` is empty.
+> [!IMPORTANT]
+> Make sure `.venv` is activated before executing any experiments or test commands.
 
-## Random baseline experiment
+---
 
-The first milestone runs two built-in random agents on `cramped_room`. Both agents sample from every available action, including `interact`, using a fixed seed so the run can be repeated.
+## Experiments & Tools
+
+### 1. Single-Episode Random Baseline (Milestone 1)
+
+Runs two built-in random agents on `cramped_room` for 400 steps:
 
 ```bash
 python experiments/run_random_baseline.py
 ```
+Output: `results/random_baseline_cramped_room.csv`
 
-The script prints a short summary and creates `results/random_baseline_cramped_room.csv`.
+---
 
-The CSV contains the episode number, timestep, each agent’s action, timestep sparse reward, per-agent shaped rewards, cumulative sparse reward, and both player positions. Generated CSV files are ignored by Git, so running the experiment does not add result data to a commit by default.
+### 2. Multi-Episode & Multi-Layout Experiments (Milestone 2)
 
-Optional settings are available with `python experiments/run_random_baseline.py --help`.
-
-## Multi-episode baseline and telemetry
-
-Milestone 2A makes the baseline more useful. Instead of just proving the environment runs once, this adds a reusable way to log structured telemetry across multiple episodes.
+Runs repeatable seeded batches with structured telemetry logging across single or multiple layouts:
 
 ```bash
+# Default run: 5 episodes on cramped_room
 python experiments/run_multi_episode_baseline.py
+
+# Multi-layout run: 10 episodes on 3 layouts
+python experiments/run_multi_episode_baseline.py --layouts cramped_room asymmetric_advantages coordination_ring --episodes 10
 ```
 
-By default, two random agents play five 400-timestep episodes on `cramped_room`. The terminal summary reports the episode count, timesteps logged, average episode length, average reward, and output path. The run creates `results/multi_episode_random_baseline_cramped_room.csv`.
+CLI options:
+- `--layouts` / `--layout`: One or more layout names.
+- `--episodes`: Number of episodes per layout (default: 5).
+- `--horizon`: Timesteps per episode (default: 400).
+- `--base-seed` / `--seed`: Base seed for episode 1 (default: 42). Episode $k$ uses seed $\text{base\_seed} + k - 1$.
+- `--output`: Optional custom output path.
 
-Each CSV row records the deterministic run ID, episode ID and seed, timestep, layout, player IDs, agent names, actions, sparse and shaped rewards, completion status, positions, orientations, held objects, and Overcooked events. The runner validates the complete CSV after saving it. The full field and missing-value definitions are in [`telemetry/README.md`](telemetry/README.md).
+Outputs generated per layout:
+- Telemetry CSV: `results/multi_episode_random_baseline_<layout>.csv`
+- Reproducibility Manifest: `results/multi_episode_random_baseline_<layout>.manifest.json`
 
-The base seed defaults to `42`, and episode seeds increase from that value (`42`, `43`, and so on). Repeating the same configuration produces the same run ID, actions, states, rewards, and CSV contents. A different layout automatically gets a different output filename. Use `--base-seed` to choose the first episode seed; `--seed` remains available as a shorter alias. Optional settings are available with `python experiments/run_multi_episode_baseline.py --help`.
+---
 
-For example, this acceptance run writes 10 deterministic episodes:
+### 3. Performance & Coordination Summarizer (Milestone 2)
+
+`summarize_episode_metrics.py` reads telemetry CSVs, computes 68-field per-episode performance and coordination metrics, and prints batch aggregate statistics:
 
 ```bash
-python experiments/run_multi_episode_baseline.py --episodes 10
-```
-
-## Episode performance and coordination metrics
-
-Milestone 2B turns saved telemetry into one comparable summary row per episode. Generate or reuse a telemetry CSV, then run:
-
-```bash
+# Summarise all CSVs in results/
 python experiments/summarize_episode_metrics.py
+
+# Process a specific multi-episode telemetry CSV
+python experiments/summarize_episode_metrics.py results/multi_episode_random_baseline_cramped_room.csv
+
+# Inspect an existing episode metrics CSV
+python experiments/summarize_episode_metrics.py results/multi_episode_random_baseline_cramped_room_episode_metrics.csv
 ```
 
-The command reads the saved random-baseline telemetry without rerunning the environment and creates `results/multi_episode_random_baseline_cramped_room_episode_metrics.csv`. It prints the episode count, team score, soups delivered, blocking events, collision events, interference timesteps, and output path.
+Outputs:
+- Per-episode metrics CSV: `results/*_episode_metrics.csv`
+- Detailed formatted terminal tables reporting Sample Size ($N$), Mean, Std, Min, and Max across:
+  - **Performance:** Team score, soups delivered, episode length.
+  - **Movement & Space:** Distance traveled, explicit idle time and rates.
+  - **Conflict & Collisions:** Wall collisions, teammate blocking events, same-target collisions, swap collisions, interference timesteps/rates, repeated interference.
+  - **Role Proxies:** Held-object time-shares (`none`, `onion`, `tomato`, `dish`, `soup`), potting events, dish/soup pickups, delivery counts/rates.
+  - **Task Duplication & Pipeline:** Redundant gather/dish/deliver timesteps, team task duplication rate, unused pipeline timesteps/rates.
 
-The summary includes score, deliveries, episode length, distance traveled, explicit idle time, wall/terrain movement failures, teammate blocking, same-target and swap collisions, and repeated interference. Every row keeps the run and episode IDs needed to join it to the source telemetry. Exact definitions, edge cases, and limitations are documented in [`metrics/README.md`](metrics/README.md).
+---
 
-## Folder structure
+## File Formats & Documentation
 
-- `agents/` — custom cooperative agent strategies
-- `experiments/` — repeatable experiment runners
-- `metrics/` — coordination and performance metrics
-- `results/` — generated experiment output
-- `notebooks/` — exploratory analysis
-- `dashboard/` — future visualization tools
-- `tests/` — automated checks
+- **[`telemetry/README.md`](telemetry/README.md):** 27-field per-timestep telemetry schema and JSON reproducibility manifest specification.
+- **[`metrics/README.md`](metrics/README.md):** Formal methods-grade mathematical specifications for every coordination, performance, role proxy, and duplication metric.
 
-## Future milestones
+---
 
-Next steps are experiments across multiple layouts and deterministic baseline agents. The framework may later support reinforcement learning, evolutionary methods, or quality-diversity approaches, but the immediate goal is a clean and reliable evaluation foundation.
+## Folder Structure
+
+- `agents/` — Custom cooperative agent implementations.
+- `experiments/` — Repeatable experiment execution scripts and summary tools.
+- `metrics/` — Metric computation, aggregation, and formal specifications.
+- `telemetry/` — Validated telemetry logging and reproducibility manifests.
+- `results/` — Generated experiment outputs (ignored by git).
+- `tests/` — Automated test suite.
+
+---
+
+## Testing
+
+Execute all unit tests with:
+```bash
+python -m unittest discover -s tests
+```

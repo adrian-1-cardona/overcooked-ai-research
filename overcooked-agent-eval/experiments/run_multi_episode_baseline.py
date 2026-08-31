@@ -1,4 +1,4 @@
-"""Run multiple random-agent episodes and save per-timestep telemetry."""
+"""Run multiple random-agent episodes across one or more layouts and save per-timestep telemetry."""
 
 from __future__ import annotations
 
@@ -19,10 +19,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from telemetry import TelemetryLogger, TelemetryRow
+from telemetry import (
+    BatchManifest,
+    TelemetryLogger,
+    TelemetryRow,
+    create_batch_manifest,
+    save_batch_manifest,
+)
 
 
-DEFAULT_LAYOUT = "cramped_room"
+DEFAULT_LAYOUTS = ["cramped_room"]
 DEFAULT_EPISODES = 5
 DEFAULT_HORIZON = 400
 DEFAULT_SEED = 42
@@ -30,9 +36,16 @@ DEFAULT_SEED = 42
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run multiple random-agent episodes and save structured telemetry."
+        description="Run multiple random-agent episodes across layouts and save structured telemetry."
     )
-    parser.add_argument("--layout", default=DEFAULT_LAYOUT)
+    parser.add_argument(
+        "--layout",
+        "--layouts",
+        dest="layouts",
+        nargs="+",
+        default=DEFAULT_LAYOUTS,
+        help="one or more layout names (e.g. cramped_room asymmetric_advantages coordination_ring)",
+    )
     parser.add_argument("--episodes", type=int, default=DEFAULT_EPISODES)
     parser.add_argument("--horizon", type=int, default=DEFAULT_HORIZON)
     parser.add_argument(
@@ -43,21 +56,41 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_SEED,
         help="seed for episode 1; later episode seeds increment by one",
     )
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=Path, help="optional custom output CSV path")
     args = parser.parse_args(argv)
+
+    # Flatten any comma-separated layout strings
+    flattened_layouts: list[str] = []
+    for item in args.layouts:
+        for name in item.split(","):
+            cleaned = name.strip()
+            if cleaned and cleaned not in flattened_layouts:
+                flattened_layouts.append(cleaned)
+    args.layouts = flattened_layouts or DEFAULT_LAYOUTS
+
     if args.episodes < 1:
         parser.error("--episodes must be at least 1")
     if args.horizon < 1:
         parser.error("--horizon must be at least 1")
     if args.base_seed < 0:
         parser.error("--base-seed cannot be negative")
-    if args.output is None:
-        args.output = (
-            PROJECT_ROOT
-            / "results"
-            / f"multi_episode_random_baseline_{args.layout}.csv"
-        )
+
     return args
+
+
+def validate_layouts(layouts: list[str]) -> None:
+    """Pre-validate that all layout names exist in OvercookedGridworld."""
+    invalid_layouts: list[str] = []
+    for layout in layouts:
+        try:
+            OvercookedGridworld.from_layout_name(layout)
+        except Exception:
+            invalid_layouts.append(layout)
+    if invalid_layouts:
+        raise ValueError(
+            f"Invalid layout(s) specified: {', '.join(invalid_layouts)}. "
+            "Please choose valid Overcooked-AI layout names."
+        )
 
 
 def action_name(action: object) -> str:
@@ -196,28 +229,84 @@ def print_summary(
     episode_rewards: list[float],
     episode_lengths: list[int],
     output_path: Path,
+    manifest_path: Path,
 ) -> None:
     episodes = len(episode_lengths)
     total_timesteps = sum(episode_lengths)
-    print("Multi-episode random baseline complete")
+    print("\nMulti-episode random baseline complete")
     print(f"Layout: {layout}")
     print(f"Episodes: {episodes}")
     print(f"Timesteps logged: {total_timesteps}")
     print(f"Average episode length: {total_timesteps / episodes:.1f}")
     print(f"Average reward / score: {sum(episode_rewards) / episodes:.1f}")
     print(f"Output CSV: {output_path.resolve()}")
+    print(f"Manifest JSON: {manifest_path.resolve()}")
+
+
+def execute_batch(
+    layouts: list[str],
+    episodes: int,
+    horizon: int,
+    base_seed: int,
+    custom_output: Path | None = None,
+) -> list[tuple[Path, Path]]:
+    """Run experiments across all specified layouts, returning paths for (csv, manifest)."""
+    validate_layouts(layouts)
+    results: list[tuple[Path, Path]] = []
+
+    for layout in layouts:
+        if custom_output is not None and len(layouts) == 1:
+            csv_path = custom_output
+        elif custom_output is not None:
+            csv_path = custom_output.parent / f"{custom_output.stem}_{layout}.csv"
+        else:
+            csv_path = (
+                PROJECT_ROOT
+                / "results"
+                / f"multi_episode_random_baseline_{layout}.csv"
+            )
+
+        manifest_path = csv_path.with_name(f"{csv_path.stem}.manifest.json")
+        run_id = deterministic_run_id(layout, episodes, horizon, base_seed)
+
+        logger, rewards, lengths = run_experiment(
+            layout, episodes, horizon, base_seed
+        )
+        saved_csv = logger.save_csv(csv_path)
+        validated_count = logger.validate_csv(saved_csv)
+        if validated_count != len(logger.rows):
+            raise RuntimeError(
+                f"Saved telemetry row count does not match the experiment for {layout}"
+            )
+
+        manifest = create_batch_manifest(
+            run_id=run_id,
+            layout=layout,
+            agent_0_name="RandomAgent",
+            agent_1_name="RandomAgent",
+            episodes=episodes,
+            horizon=horizon,
+            base_seed=base_seed,
+            output_telemetry_path=saved_csv,
+            project_root=PROJECT_ROOT,
+        )
+        saved_manifest = save_batch_manifest(manifest, manifest_path)
+
+        print_summary(layout, rewards, lengths, saved_csv, saved_manifest)
+        results.append((saved_csv, saved_manifest))
+
+    return results
 
 
 def main() -> None:
     args = parse_args()
-    logger, rewards, lengths = run_experiment(
-        args.layout, args.episodes, args.horizon, args.base_seed
+    execute_batch(
+        layouts=args.layouts,
+        episodes=args.episodes,
+        horizon=args.horizon,
+        base_seed=args.base_seed,
+        custom_output=args.output,
     )
-    output_path = logger.save_csv(args.output)
-    validated_rows = logger.validate_csv(output_path)
-    if validated_rows != len(logger.rows):
-        raise RuntimeError("Saved telemetry row count does not match the experiment")
-    print_summary(args.layout, rewards, lengths, output_path)
 
 
 if __name__ == "__main__":
