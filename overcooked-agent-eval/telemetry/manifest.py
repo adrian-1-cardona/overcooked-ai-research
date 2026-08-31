@@ -1,4 +1,17 @@
-"""Reproducibility manifest recording experiment configuration and environment metadata."""
+"""Reproducibility manifest recording experiment configuration and environment metadata.
+
+What this file does (in simple terms):
+Think of this like a recipe card or a birth certificate for each game experiment!
+Whenever we run a batch of Overcooked games, this file creates a JSON summary
+that records:
+  - Which kitchen map (layout) was played
+  - Which robot players (agents) were in the kitchen
+  - How many games (episodes) were played
+  - The exact random number seeds used
+  - The Python version and git commit codes
+This way, if anyone wants to run the exact same experiment years later,
+they have all the exact ingredients and settings to get the exact same results.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +26,10 @@ import overcooked_ai_py
 
 
 def get_git_commit(cwd: Path | str | None = None) -> str:
-    """Return the git commit SHA for the given directory or 'unknown'."""
+    """Find the current git commit code so we know the exact code version used.
+    
+    If git is not available or fails, it returns 'unknown'.
+    """
     try:
         commit = (
             subprocess.check_output(
@@ -32,7 +48,10 @@ def get_git_commit(cwd: Path | str | None = None) -> str:
 
 
 def get_overcooked_ai_version(project_root: Path) -> str:
-    """Return the overcooked-ai package version or submodule git commit."""
+    """Find the version or git commit code for the Overcooked-AI game package.
+    
+    This ensures we know exactly which version of the game simulator ran.
+    """
     version = getattr(overcooked_ai_py, "__version__", None)
     if version and version != "unknown":
         return str(version)
@@ -46,25 +65,42 @@ def get_overcooked_ai_version(project_root: Path) -> str:
 
 @dataclass(frozen=True)
 class BatchManifest:
-    """Complete metadata required to reproduce an experiment batch."""
+    """The complete recipe card (manifest) for a batch of experiments."""
 
+    # Schema version so future code knows what format this is
     schema_version: int
+    
+    # Unique ID for this exact configuration
     run_id: str
+    
+    # Kitchen layout name (like 'cramped_room')
     layout: str
+    
+    # Names of player 1 (chef 0) and player 2 (chef 1)
     agent_0_name: str
     agent_1_name: str
+    
+    # How many games were played and how many timesteps each game lasted
     episodes: int
     horizon: int
+    
+    # Starting seed and the full list of seeds (one for each game)
     base_seed: int
     episode_seeds: list[int]
+    
+    # Path to the CSV file where the game-by-game data was saved
     output_telemetry_file: str
+    
+    # Computer environment details: Python version, game version, git commit
     python_version: str
     overcooked_ai_version: str
     evaluation_commit: str
+    
+    # The date and time when this experiment was created
     created_at: str
 
     def __post_init__(self) -> None:
-        """Validate that all required manifest fields are populated."""
+        """Check that no important information is missing or blank."""
         if not self.run_id or not isinstance(self.run_id, str):
             raise ValueError("Manifest run_id must be a non-empty string")
         if not self.layout or not isinstance(self.layout, str):
@@ -83,10 +119,12 @@ class BatchManifest:
             raise ValueError("Manifest evaluation_commit cannot be empty")
 
     def to_dict(self) -> dict[str, object]:
+        """Convert manifest to a standard Python dictionary."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> BatchManifest:
+        """Load manifest from a Python dictionary."""
         return cls(
             schema_version=int(data["schema_version"]),
             run_id=str(data["run_id"]),
@@ -117,15 +155,19 @@ def create_batch_manifest(
     project_root: Path | None = None,
     created_at: str | None = None,
 ) -> BatchManifest:
-    """Create a validated BatchManifest for an experiment run."""
+    """Create a validated BatchManifest containing all environment details."""
     if project_root is None:
         project_root = Path(__file__).resolve().parents[1]
 
+    # Grab python version (e.g. 3.10.21)
     python_version = sys.version.split()[0]
+    
+    # Grab simulator version and code commit
     overcooked_version = get_overcooked_ai_version(project_root)
     eval_commit = get_git_commit(project_root)
     timestamp = created_at or datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+    # Build the manifest
     return BatchManifest(
         schema_version=2,
         run_id=run_id,
@@ -145,7 +187,7 @@ def create_batch_manifest(
 
 
 def save_batch_manifest(manifest: BatchManifest, manifest_path: Path | str) -> Path:
-    """Write a batch manifest to JSON."""
+    """Save the manifest to a nice, readable JSON file."""
     path = Path(manifest_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -154,7 +196,7 @@ def save_batch_manifest(manifest: BatchManifest, manifest_path: Path | str) -> P
 
 
 def load_batch_manifest(manifest_path: Path | str) -> BatchManifest:
-    """Load and validate a batch manifest from JSON."""
+    """Read a saved manifest JSON file back into Python."""
     path = Path(manifest_path)
     if not path.exists():
         raise FileNotFoundError(f"Manifest not found: {path}")
