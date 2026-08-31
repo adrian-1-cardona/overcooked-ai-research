@@ -1,4 +1,16 @@
-"""Run multiple random-agent episodes across one or more layouts and save per-timestep telemetry."""
+"""Run multiple random-agent episodes across one or more layouts and save per-timestep telemetry.
+
+What this script does (in simple terms):
+This script runs a batch of Overcooked games between two robot chefs (RandomAgents).
+You can tell it:
+  - Which kitchen map to use (e.g. cramped_room, asymmetric_advantages, coordination_ring)
+  - How many games to play (e.g. 5 or 10 games)
+  - How long each game lasts (e.g. 400 steps)
+  - What random seed number to start with (for 100% reproducible games)
+
+At every step of every game, it logs what happened (positions, actions, soup points)
+into a neat CSV spreadsheet and creates a companion JSON manifest recipe card.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +40,7 @@ from telemetry import (
 )
 
 
+# Default settings for quick baseline runs:
 DEFAULT_LAYOUTS = ["cramped_room"]
 DEFAULT_EPISODES = 5
 DEFAULT_HORIZON = 400
@@ -35,6 +48,7 @@ DEFAULT_SEED = 42
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Read command-line arguments passed to this script."""
     parser = argparse.ArgumentParser(
         description="Run multiple random-agent episodes across layouts and save structured telemetry."
     )
@@ -46,20 +60,34 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_LAYOUTS,
         help="one or more layout names (e.g. cramped_room asymmetric_advantages coordination_ring)",
     )
-    parser.add_argument("--episodes", type=int, default=DEFAULT_EPISODES)
-    parser.add_argument("--horizon", type=int, default=DEFAULT_HORIZON)
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=DEFAULT_EPISODES,
+        help="number of games to play per layout (default: 5)",
+    )
+    parser.add_argument(
+        "--horizon",
+        type=int,
+        default=DEFAULT_HORIZON,
+        help="number of timesteps per game (default: 400)",
+    )
     parser.add_argument(
         "--base-seed",
         "--seed",
         dest="base_seed",
         type=int,
         default=DEFAULT_SEED,
-        help="seed for episode 1; later episode seeds increment by one",
+        help="seed for episode 1; later episode seeds increment by one (default: 42)",
     )
-    parser.add_argument("--output", type=Path, help="optional custom output CSV path")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="optional custom output CSV path",
+    )
     args = parser.parse_args(argv)
 
-    # Flatten any comma-separated layout strings
+    # Flatten any comma-separated layout strings (e.g. 'cramped_room,asymmetric_advantages')
     flattened_layouts: list[str] = []
     for item in args.layouts:
         for name in item.split(","):
@@ -68,6 +96,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                 flattened_layouts.append(cleaned)
     args.layouts = flattened_layouts or DEFAULT_LAYOUTS
 
+    # Check for invalid numbers
     if args.episodes < 1:
         parser.error("--episodes must be at least 1")
     if args.horizon < 1:
@@ -79,7 +108,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def validate_layouts(layouts: list[str]) -> None:
-    """Pre-validate that all layout names exist in OvercookedGridworld."""
+    """Pre-validate that all layout names exist in Overcooked-AI before running.
+    
+    If any map name is misspelled, it will tell you immediately before wasting time.
+    """
     invalid_layouts: list[str] = []
     for layout in layouts:
         try:
@@ -94,6 +126,7 @@ def validate_layouts(layouts: list[str]) -> None:
 
 
 def action_name(action: object) -> str:
+    """Convert movement coordinate deltas like (0, -1) into human words like 'north'."""
     names = {
         (0, -1): "north",
         (0, 1): "south",
@@ -106,12 +139,13 @@ def action_name(action: object) -> str:
 
 
 def held_object_name(player: object) -> str:
+    """Return the name of the object in the chef's hands (or 'none')."""
     held_object = player.held_object
     return "none" if held_object is None else held_object.name
 
 
 def deterministic_run_id(layout: str, episodes: int, horizon: int, seed: int) -> str:
-    """Identify a configuration consistently across repeated runs."""
+    """Create a unique fingerprint ID for this exact experiment configuration."""
     configuration = {
         "schema_version": 2,
         "layout": layout,
@@ -129,7 +163,7 @@ def deterministic_run_id(layout: str, episodes: int, horizon: int, seed: int) ->
 def events_at_timestep(
     game_stats: dict[str, object], timestep: int, agent_index: int
 ) -> str:
-    """Return a stable semicolon-separated list of events for one agent."""
+    """Return a semicolon-separated list of game events (like 'potting_onion;soup_delivery')."""
     excluded = {
         "cumulative_sparse_rewards_by_agent",
         "cumulative_shaped_rewards_by_agent",
@@ -145,16 +179,20 @@ def events_at_timestep(
 def run_experiment(
     layout: str, episodes: int, horizon: int, seed: int
 ) -> tuple[TelemetryLogger, list[float], list[int]]:
-    """Run the requested episodes and return telemetry and episode summaries."""
+    """Run all requested games on a single kitchen layout and record the telemetry."""
     mdp = OvercookedGridworld.from_layout_name(layout)
     logger = TelemetryLogger()
     episode_rewards: list[float] = []
     episode_lengths: list[int] = []
     run_id = deterministic_run_id(layout, episodes, horizon, seed)
 
+    # Loop through each game episode
     for episode_id in range(1, episodes + 1):
+        # Deterministic seed: starts at base_seed and increments by 1 for each game
         episode_seed = seed + episode_id - 1
         np.random.seed(episode_seed)
+        
+        # Set up environment and two random agents
         env = OvercookedEnv.from_mdp(mdp, horizon=horizon, info_level=0)
         agents = [RandomAgent(all_actions=True), RandomAgent(all_actions=True)]
         for index, agent in enumerate(agents):
@@ -166,6 +204,7 @@ def run_experiment(
         episode_reward = 0.0
         episode_length = 0
 
+        # Step through the game until the timer runs out
         while not done:
             actions_and_info = [agent.action(state) for agent in agents]
             joint_action = tuple(item[0] for item in actions_and_info)
@@ -177,6 +216,8 @@ def run_experiment(
             episode_reward += reward
             episode_length += 1
             players = next_state.players
+            
+            # Log the full 27-field telemetry row
             logger.log(
                 TelemetryRow(
                     run_id=run_id,
@@ -231,6 +272,7 @@ def print_summary(
     output_path: Path,
     manifest_path: Path,
 ) -> None:
+    """Print a clean summary of the completed batch to the terminal."""
     episodes = len(episode_lengths)
     total_timesteps = sum(episode_lengths)
     print("\nMulti-episode random baseline complete")
@@ -250,10 +292,12 @@ def execute_batch(
     base_seed: int,
     custom_output: Path | None = None,
 ) -> list[tuple[Path, Path]]:
-    """Run experiments across all specified layouts, returning paths for (csv, manifest)."""
+    """Run experiments across all specified layouts, saving CSV and manifest files."""
+    # First, validate all layout names
     validate_layouts(layouts)
     results: list[tuple[Path, Path]] = []
 
+    # Run each layout in turn
     for layout in layouts:
         if custom_output is not None and len(layouts) == 1:
             csv_path = custom_output
@@ -269,9 +313,12 @@ def execute_batch(
         manifest_path = csv_path.with_name(f"{csv_path.stem}.manifest.json")
         run_id = deterministic_run_id(layout, episodes, horizon, base_seed)
 
+        # Run the experiment
         logger, rewards, lengths = run_experiment(
             layout, episodes, horizon, base_seed
         )
+        
+        # Save and validate CSV
         saved_csv = logger.save_csv(csv_path)
         validated_count = logger.validate_csv(saved_csv)
         if validated_count != len(logger.rows):
@@ -279,6 +326,7 @@ def execute_batch(
                 f"Saved telemetry row count does not match the experiment for {layout}"
             )
 
+        # Create and save JSON reproducibility manifest
         manifest = create_batch_manifest(
             run_id=run_id,
             layout=layout,

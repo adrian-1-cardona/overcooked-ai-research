@@ -1,13 +1,16 @@
 """Summarize performance, coordination, role proxies, and duplication metrics from result CSVs.
 
-Supports:
-  1. Multi-episode timestep telemetry (e.g. results/multi_episode_random_baseline_cramped_room.csv)
-     - Computes episode-level metrics CSV (*_episode_metrics.csv)
-     - Computes and prints batch aggregate statistics (N, mean, std, min, max)
-  2. Episode-level metrics CSV (e.g. results/*_episode_metrics.csv)
-     - Computes and prints batch aggregate statistics across episodes
-  3. Single-episode legacy CSV (e.g. results/random_baseline_cramped_room.csv)
-     - Prints single episode score and step metrics
+What this script does (in simple terms):
+This is our analysis and report card tool!
+You can point it at any CSV file produced by our experiments:
+  1. If you point it at raw step-by-step game telemetry (e.g. multi_episode_*.csv):
+     - It calculates the 68 coordination and performance metrics for each game.
+     - It saves a brand new '*_episode_metrics.csv' spreadsheet.
+     - It prints out a clean statistics table (Average, Min, Max, Variation) for the whole batch.
+  2. If you point it at an already computed '*_episode_metrics.csv' file:
+     - It reads the game summaries and prints out the statistics table.
+  3. If you don't give it any file names:
+     - It looks in the 'results/' folder and summarizes every CSV file it finds!
 """
 
 from __future__ import annotations
@@ -40,12 +43,12 @@ DEFAULT_INPUT = (
 
 
 # ---------------------------------------------------------------------------
-# Formatting helpers
+# Formatting helpers (making numbers look nice on screen)
 # ---------------------------------------------------------------------------
 
 
 def _fmt(value: float, decimals: int = 3) -> str:
-    """Format a float, suppressing unnecessary trailing zeros."""
+    """Format a floating-point number nicely, removing ugly trailing zeros."""
     if decimals == 0:
         return str(int(round(value)))
     formatted = f"{value:.{decimals}f}".rstrip("0").rstrip(".")
@@ -53,11 +56,13 @@ def _fmt(value: float, decimals: int = 3) -> str:
 
 
 def _print_section(title: str) -> None:
+    """Print a section header with an underline."""
     print(f"\n  {title}")
     print("  " + "-" * len(title))
 
 
 def _stat_row(label: str, values: list[float], decimals: int = 3) -> None:
+    """Print a single metric row showing N, Mean (Average), Std (Spread), Min, and Max."""
     if not values:
         print(f"    {label:<42}  n/a")
         return
@@ -77,7 +82,7 @@ def _stat_row(label: str, values: list[float], decimals: int = 3) -> None:
 
 
 def _col(rows: list[dict], key: str) -> list[float]:
-    """Extract a numeric column, silently skipping missing / non-numeric values."""
+    """Extract a list of numbers from a specific column in the CSV data."""
     out: list[float] = []
     for r in rows:
         v = r.get(key, "")
@@ -90,22 +95,22 @@ def _col(rows: list[dict], key: str) -> list[float]:
 
 
 # ---------------------------------------------------------------------------
-# Format detection
+# Format detection (figure out what kind of CSV file this is)
 # ---------------------------------------------------------------------------
 
 
 def _is_episode_metrics(fieldnames: list[str]) -> bool:
-    """Return True if the CSV contains episode-level metrics."""
+    """Return True if this CSV is an episode-level metrics summary file."""
     return "team_score" in fieldnames and "episode_length" in fieldnames
 
 
 def _is_multi_episode_timestep(fieldnames: list[str]) -> bool:
-    """Return True if the CSV is a multi-episode timestep telemetry file."""
+    """Return True if this CSV is multi-episode step-by-step game telemetry."""
     return "episode_id" in fieldnames and "timestep" in fieldnames and "reward" in fieldnames
 
 
 def _is_single_episode_timestep(fieldnames: list[str]) -> bool:
-    """Return True if the CSV is a single-episode timestep telemetry file."""
+    """Return True if this CSV is a legacy single-episode file."""
     return "episode" in fieldnames and "timestep" in fieldnames
 
 
@@ -115,6 +120,7 @@ def _is_single_episode_timestep(fieldnames: list[str]) -> bool:
 
 
 def _summarize_single_episode_csv(path: Path, rows: list[dict]) -> None:
+    """Print a summary of a single-episode baseline run."""
     episodes: dict[int, list[dict]] = {}
     for row in rows:
         ep = int(row.get("episode", 1))
@@ -158,6 +164,7 @@ def _summarize_single_episode_csv(path: Path, rows: list[dict]) -> None:
 
 
 def _summarize_episode_metrics_rows(path: Path, rows: list[dict]) -> None:
+    """Print complete statistics for all 68 metrics across episodes."""
     print(f"\n{'='*70}")
     print(f"  File : {path.name}")
     print(f"  Type : episode-level metrics")
@@ -257,6 +264,7 @@ def process_path(
     output_path: Path | None = None,
     aggregate_output_path: Path | None = None,
 ) -> None:
+    """Examine any CSV file and run the appropriate analysis for its format."""
     if not path.exists():
         print(f"[warn] File not found: {path}")
         return
@@ -272,11 +280,6 @@ def process_path(
 
     if _is_episode_metrics(fieldnames):
         _summarize_episode_metrics_rows(path, rows)
-        if aggregate_output_path:
-            from telemetry import TelemetryLogger
-            # Convert rows to EpisodeMetrics to aggregate
-            # Or compute directly
-            pass
     elif _is_multi_episode_timestep(fieldnames):
         process_telemetry_file(path, output_path, aggregate_output_path)
     elif _is_single_episode_timestep(fieldnames):
