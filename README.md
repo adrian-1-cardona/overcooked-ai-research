@@ -1,6 +1,6 @@
 # Overcooked-AI Research Workspace
 
-This repo is where I’m building out my senior project research work around cooperative AI agents in Overcooked-AI. The goal is not just to train an agent to play Overcooked. The goal is to build a reusable evaluation framework for running agents, collecting telemetry, comparing coordination behavior, and eventually studying partner compatibility across different cooperative strategies.
+This repo is where I’m building out my senior project research work around cooperative AI agents in Overcooked-AI. The goal is not just to train an agent to play Overcooked. The goal is to build a reusable evaluation framework for running agents, collecting telemetry, comparing coordination behavior, and eventually studying partner compatibility across different cooperative strategies. Done by Adrian Cardona under advisor Professor Rodrigo Canaan.
 
 ## Research question
 
