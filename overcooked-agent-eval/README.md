@@ -29,6 +29,36 @@ The script prints a short summary and creates `results/random_baseline_cramped_r
 
 Optional settings are available with `python experiments/run_random_baseline.py --help`.
 
+### Gameplay rendering
+
+Render Overcooked-AI gameplay live in an interactive Pygame desktop window, export to an MP4 video, or replay existing CSV telemetry.
+
+```bash
+# 1. Live Pygame desktop window (default when GUI is available)
+python experiments/render_gameplay.py
+
+# 2. Interactive human mode: Play as Chef 0 with keyboard against an AI partner
+python experiments/render_gameplay.py --agent-0 human
+
+# 3. Export episode to an MP4 video
+python experiments/render_gameplay.py --mode video --horizon 200 --output results/gameplay.mp4
+
+# 4. Replay a previously recorded CSV telemetry run
+python experiments/render_gameplay.py --replay-csv results/random_baseline_cramped_room.csv
+
+# 5. Render on different kitchen layouts at custom FPS
+python experiments/render_gameplay.py --layout asymmetric_advantages --fps 15
+```
+
+**Window Controls:**
+- `SPACE` / `P`: Pause / Resume simulation
+- `RIGHT ARROW`: Step 1 timestep forward (when paused)
+- `UP` / `DOWN`: Increase / Decrease FPS playback speed
+- `R`: Restart episode
+- `ESC` / `Q`: Exit window cleanly
+- **Human Player Controls (`--agent-0 human`):** `WASD` / `Arrow Keys` to move; `SPACE` / `ENTER` / `F` to interact (pick up, drop, chop, cook).
+
+
 ### Summarising results
 
 `summarize_episode_metrics.py` reads any CSV produced by this framework and prints a formatted summary to stdout. It auto-detects the file format.
