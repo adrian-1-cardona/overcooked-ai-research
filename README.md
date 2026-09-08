@@ -1,34 +1,86 @@
-# Overcooked-AI Research Workspace
+# Overcooked-AI Research Workspace 🧑‍🍳🤖
 
 This repository contains Adrian Cardona's senior project research on cooperative AI agents in Overcooked-AI, completed under the guidance of Professor Rodrigo Canaan.
 
-The research asks: How do different cooperative agent strategies affect team performance, coordination quality, and partner compatibility in Overcooked-AI?
+The research asks: *How do different cooperative agent strategies affect team performance, coordination quality, and partner compatibility in Overcooked-AI?*
 
-## Milestone 1
+---
 
-Milestone 1 provides the first repeatable baseline experiment. Two upstream `RandomAgent` instances play one episode while the project records their actions, rewards, positions, and completion state at every timestep.
+## 🌟 Star Feature: Visual Gameplay Renderer & Interactive Player
 
-This milestone establishes a simple data collection workflow before more advanced agents and coordination metrics are added.
+Bring Overcooked-AI to life! This research workspace features a high-performance gameplay visualizer, interactive human player, video exporter, and telemetry replayer built directly on top of Overcooked-AI's sprite rendering engine.
 
-## Run From the Project Root
+Whether you want to **watch AI agents coordinate live in a desktop window**, **play as Chef 0 with your keyboard**, **export MP4 gameplay videos headlessly**, or **visually replay recorded experiment trajectories**, you can do it all with a single unified command:
 
-Run every command in this README from the project root, which is the directory containing:
+```bash
+# ⚡ Quickest One-Line Launch (auto-uses .venv):
+./render.sh
 
-```text
-README.md
-external/
-overcooked-agent-eval/
+# Or using the root launcher:
+python render.py
+
+# 1. Watch AI agents play live in an interactive Pygame desktop window
+python render.py
+
+# 2. Jump in and play as Chef 0 using WASD / Arrow keys alongside an AI partner!
+python render.py --agent-0 human
+
+# 3. Export episode gameplay to an MP4 video (works headlessly too)
+python render.py --mode video --horizon 200 --output overcooked-agent-eval/results/gameplay.mp4
+
+# 4. Visually replay a previously recorded experiment CSV
+python render.py --replay-csv overcooked-agent-eval/results/random_baseline_cramped_room.csv
+
+# 5. Explore different kitchen layouts at custom playback speeds
+python render.py --layout asymmetric_advantages --fps 15
 ```
 
-Do not change into `overcooked-agent-eval/` before running the commands below.
+> **Note:** You can also run via the full path `python overcooked-agent-eval/experiments/render_gameplay.py [options]`.
+
+### 🎮 Interactive Window Controls
+
+When running in window mode (`--mode window` or default when a display is connected):
+
+| Key | Action |
+| --- | --- |
+| `SPACE` / `P` | **Pause / Resume** simulation |
+| `RIGHT ARROW` | **Step 1 frame forward** (when paused) |
+| `UP` / `DOWN` | **Increase / Decrease FPS** playback speed |
+| `R` | **Restart episode** from beginning |
+| `ESC` / `Q` | **Exit window** cleanly |
+| **Human Controls (`--agent-0 human`)** | `WASD` or `Arrow Keys` to move; `SPACE` / `ENTER` / `F` to interact (pick up, drop, chop, cook) |
+
+### 🚀 Key Capabilities
+
+- 🖥️ **Live Pygame Desktop Player**: Real-time rendering of chefs, onions, tomatoes, cooking pots, soup progress bars, recipes, timers, and scores.
+- 🧑‍🍳 **Human-in-the-Loop Evaluation**: Jump into the kitchen as Chef 0 to test coordination fluidity with AI agents in real time.
+- 🎥 **Headless-Safe Video Export**: Encodes high-fidelity `.mp4` video with OpenCV (`cv2.VideoWriter`), automatically padding dimensions to ensure 100% compatibility with QuickTime, web browsers, and media players.
+- 🔁 **Telemetry CSV Replay**: Re-simulates and visually replays recorded single-episode or multi-episode experiment CSVs with automatic layout detection.
+- 🗺️ **Full Layout Support**: Discovers and validates across all 49 built-in Overcooked-AI kitchen layouts (e.g. `cramped_room`, `asymmetric_advantages`, `coordination_ring`, `forced_coordination`, `counter_circuit`).
+
+### ⚙️ Command-Line Options (`render_gameplay.py`)
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--layout` | `str` | `cramped_room` | Overcooked kitchen layout name |
+| `--mode` | `str` | `auto` | `window` (live GUI), `video` (MP4), `frames` (PNGs), or `auto` |
+| `--horizon` | `int` | `400` | Maximum timesteps per episode |
+| `--fps` | `int` | `10` | Playback speed and video framerate |
+| `--agent-0` | `str` | `random` | Policy for Agent 0: `random`, `stay`, or `human` |
+| `--agent-1` | `str` | `random` | Policy for Agent 1: `random` or `stay` |
+| `--output` | `Path` | `results/gameplay.mp4` | File path for exported video or directory for frames |
+| `--replay-csv` | `Path` | `None` | Path to recorded CSV telemetry file to replay |
+| `--episode` | `int` | `1` | Episode number to replay when CSV contains multiple runs |
+| `--seed` | `int` | `42` | Random seed for reproducible agent sampling |
+| `--tile-size` | `int` | `75` | Pixel scale per grid cell |
+
+---
 
 ## Requirements
 
 - Git
-- Python 3.10
+- Python 3.10 (`>=3.10,<3.11`)
 - The `external/overcooked_ai` Git submodule
-
-The checked-out Overcooked-AI package requires Python `>=3.10,<3.11`.
 
 ## Setup
 
@@ -45,7 +97,7 @@ For an existing clone, initialize the submodule from the project root:
 git submodule update --init --recursive
 ```
 
-Create the virtual environment and install the local Overcooked-AI package:
+Create the virtual environment and install dependencies:
 
 ```bash
 python3.10 -m venv overcooked-agent-eval/.venv
@@ -54,143 +106,76 @@ python -m pip install --upgrade pip
 python -m pip install -e ./external/overcooked_ai
 ```
 
-When opening a new terminal, return to the project root and reactivate the environment:
+When opening a new terminal, reactivate the environment from the project root:
 
 ```bash
 source overcooked-agent-eval/.venv/bin/activate
 ```
 
-## Run the Milestone 1 Baseline
+---
+
+## Baseline Experiments & Telemetry
+
+### Run the Random Baseline
+
+To run a quantitative baseline experiment without graphical rendering:
 
 ```bash
 python overcooked-agent-eval/experiments/run_random_baseline.py
 ```
 
 The default run:
-
 - Uses the `cramped_room` layout.
-- Runs one episode.
-- Stops after 400 timesteps.
-- Uses random seed 42.
-- Uses two random agents that can move, stay, or interact.
-- Writes one CSV row after every environment step.
+- Runs one episode for 400 timesteps using random seed 42.
+- Evaluates two random agents sampling from all actions (`north`, `south`, `east`, `west`, `stay`, `interact`).
+- Saves per-timestep telemetry to `overcooked-agent-eval/results/random_baseline_cramped_room.csv`.
 
-The result is saved to:
-
-```text
-overcooked-agent-eval/results/random_baseline_cramped_room.csv
-```
-
-Running the command again replaces the existing file at that path. It does not append new rows.
-
-## Terminal Output
-
-A completed run prints a summary in this format:
+### Terminal Output
 
 ```text
 Random baseline complete
 Layout: cramped_room
 Episode length: 400
-Total reward / score: <final score>
+Total reward / score: 0.0
 Timesteps logged: 400
-Output CSV: <absolute path>/overcooked-agent-eval/results/random_baseline_cramped_room.csv
+Output CSV: <path>/overcooked-agent-eval/results/random_baseline_cramped_room.csv
 ```
 
-| Value | Meaning |
-| --- | --- |
-| `Layout` | The Overcooked-AI kitchen map used for the episode |
-| `Episode length` | The number of environment steps completed |
-| `Total reward / score` | The final cumulative team sparse reward |
-| `Timesteps logged` | The number of data rows written to the CSV |
-| `Output CSV` | The absolute path to the generated result file |
+### Telemetry CSV Structure
 
-The score includes sparse team reward only. Per-agent shaped rewards are logged in the CSV for analysis, but they are not added to `Total reward / score`.
+The generated CSV records 11 fields per timestep:
+`episode`, `timestep`, `agent_0_action`, `agent_1_action`, `sparse_reward`, `agent_0_shaped_reward`, `agent_1_shaped_reward`, `cumulative_sparse_reward`, `agent_0_position`, `agent_1_position`, and `done`.
 
-## CSV Output
+### Summarize Results
 
-The CSV has 11 columns and one row per completed environment step. The default run produces 400 data rows plus the header row.
-
-| Column | Meaning |
-| --- | --- |
-| `episode` | Episode number. It is always `1` in this single-episode runner. |
-| `timestep` | Completed step number. It starts at `1` and ends at `400` by default. |
-| `agent_0_action` | Action attempted by agent 0: `north`, `south`, `east`, `west`, `stay`, or `interact`. |
-| `agent_1_action` | Action attempted by agent 1. |
-| `sparse_reward` | Team reward received during this step, usually from completing a delivery. |
-| `agent_0_shaped_reward` | Additional diagnostic reward assigned to agent 0 during this step. |
-| `agent_1_shaped_reward` | Additional diagnostic reward assigned to agent 1 during this step. |
-| `cumulative_sparse_reward` | Running total of `sparse_reward`. Its final value is the terminal score. |
-| `agent_0_position` | Agent 0's grid position after the action, stored as an `(x, y)` coordinate. |
-| `agent_1_position` | Agent 1's grid position after the action. |
-| `done` | `True` when the episode has ended and `False` otherwise. |
-
-Each row is written after an environment step. The action columns contain the actions attempted during that step, and the position columns contain the resulting post-step positions. A movement action does not guarantee that an agent moved because a wall, counter, or teammate may block it.
-
-## Change the Run Settings
-
-The runner supports four options:
-
-| Option | Meaning | Default |
-| --- | --- | --- |
-| `--layout` | Overcooked-AI layout name | `cramped_room` |
-| `--horizon` | Maximum number of timesteps | `400` |
-| `--seed` | NumPy random seed used by both random agents | `42` |
-| `--output` | CSV output path | `overcooked-agent-eval/results/random_baseline_cramped_room.csv` |
-
-Example:
-
-```bash
-python overcooked-agent-eval/experiments/run_random_baseline.py \
-  --layout asymmetric_advantages \
-  --horizon 200 \
-  --seed 7 \
-  --output overcooked-agent-eval/results/random_baseline_asymmetric_advantages.csv
-```
-
-When changing `--layout`, also set `--output`. Otherwise, the runner still uses the default filename containing `cramped_room` and replaces that file with data from the selected layout.
-
-View the built-in option reference with:
-
-```bash
-python overcooked-agent-eval/experiments/run_random_baseline.py --help
-```
-
-## Summarize the Result
-
-The result summarizer can read the Milestone 1 CSV and print a short report:
+The result summarizer reads any generated CSV and prints a diagnostic report:
 
 ```bash
 python overcooked-agent-eval/experiments/summarize_episode_metrics.py \
   overcooked-agent-eval/results/random_baseline_cramped_room.csv
 ```
 
-For this single-episode format, the report shows:
-
-- Team sparse reward.
-- Cumulative shaped reward for each agent.
-- Episode length.
-- Total timesteps.
-
-This command prints the report to the terminal. It does not create another CSV for the Milestone 1 format.
-
-## Reproducibility and Limits
-
-The runner seeds NumPy before creating the two random agents. Repeating the same command with the same code and dependency versions should produce the same trajectory.
-
-Milestone 1 has several intentional limits:
-
-- It runs only one episode, so it does not provide averages or variation across games.
-- It uses random agents rather than coordinated strategies.
-- It records basic actions, rewards, and positions but not held objects, orientations, or detailed game events.
-- It does not create a separate run manifest.
-- Dependencies are not fully version locked, so identical behavior across different environments is not guaranteed.
+---
 
 ## Repository Structure
 
-- `external/overcooked_ai/`: Upstream Overcooked-AI Git submodule.
-- `overcooked-agent-eval/experiments/`: Experiment runner and result summarizer.
-- `overcooked-agent-eval/results/`: Generated CSV output.
-- `overcooked-agent-eval/agents/`: Location for future custom agents.
-- `overcooked-agent-eval/metrics/`: Location for evaluation metrics.
-- `project_docs/`: Research proposal and planning documents.
-- `work_done/`: Completed milestone and pull request write-ups.
+```text
+overcooked-ai-research/
+├── README.md                      # Main research overview & gameplay renderer guide
+├── render.py                      # ⚡ One-line root gameplay renderer launcher
+├── render.sh                      # ⚡ Executable one-line shell launcher
+├── external/                      # Git submodules
+│   └── overcooked_ai/             # Upstream Overcooked-AI benchmark (read-only)
+├── overcooked-agent-eval/         # Evaluation framework
+│   ├── experiments/
+│   │   ├── render_gameplay.py     # 🌟 Core gameplay visualizer, player & exporter
+│   │   ├── run_random_baseline.py # Reproducible baseline experiment runner
+│   │   └── summarize_episode_metrics.py # Result summarizer
+│   ├── tests/
+│   │   └── test_render_gameplay.py # Automated test suite (8 tests)
+│   ├── results/                   # Generated telemetry CSVs and MP4 videos
+│   ├── agents/                    # Future custom cooperative agents
+│   └── metrics/                   # Future partner compatibility metrics
+├── project_docs/                  # Project proposal and research notes
+└── work_done/                     # Milestone write-ups and documentation
+```

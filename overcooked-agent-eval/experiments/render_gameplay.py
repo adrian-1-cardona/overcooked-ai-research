@@ -3,14 +3,43 @@
 This command brings Overcooked-AI visualization to life by bridging the built-in
 StateVisualizer with live episode simulation, interactive keyboard play,
 video export, and CSV replay.
+
+==============================================================================
+COMMANDS TO RUN:
+==============================================================================
+
+From repository root:
+  # 1. Watch AI agents play live in a desktop window (default: cramped_room):
+  python overcooked-agent-eval/experiments/render_gameplay.py
+  (or simply: ./render.sh OR python render.py)
+
+  # 2. Play interactively as Chef 0 with your keyboard:
+  python overcooked-agent-eval/experiments/render_gameplay.py --agent-0 human
+  (Controls: WASD/Arrows to move, SPACE/ENTER/F to interact, P to pause)
+
+  # 3. Explore different kitchen layouts and speeds:
+  python overcooked-agent-eval/experiments/render_gameplay.py --layout asymmetric_advantages --fps 15
+  python overcooked-agent-eval/experiments/render_gameplay.py --layout coordination_ring
+  python overcooked-agent-eval/experiments/render_gameplay.py --layout counter_circuit
+
+  # 4. Export gameplay to an MP4 video file (headless-safe):
+  python overcooked-agent-eval/experiments/render_gameplay.py --mode video --horizon 200 --output overcooked-agent-eval/results/gameplay.mp4
+
+  # 5. Replay an existing recorded telemetry CSV run:
+  python overcooked-agent-eval/experiments/render_gameplay.py --replay-csv overcooked-agent-eval/results/random_baseline_cramped_room.csv
+
+  # 6. Export individual PNG image frames:
+  python overcooked-agent-eval/experiments/render_gameplay.py --mode frames --horizon 50 --output overcooked-agent-eval/results/frames
+
+From inside overcooked-agent-eval/ directory:
+  python experiments/render_gameplay.py [options]
+==============================================================================
 """
 
 from __future__ import annotations
 
 import argparse
-import copy
 import csv
-import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -374,7 +403,7 @@ def run_window_rendering(
             else:
                 joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-            next_state, sparse_reward, done, info = env.step(joint_action)
+            next_state, sparse_reward, done, _ = env.step(joint_action)
             cumulative_score += sparse_reward
             state = next_state
             step_count += 1
@@ -459,7 +488,7 @@ def run_video_export(
         else:
             joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-        next_state, sparse_reward, done, info = env.step(joint_action)
+        next_state, sparse_reward, done, _ = env.step(joint_action)
         cumulative_score += sparse_reward
         state = next_state
         step_count += 1
@@ -522,7 +551,7 @@ def run_frames_export(
         else:
             joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-        next_state, sparse_reward, done, info = env.step(joint_action)
+        next_state, sparse_reward, done, _ = env.step(joint_action)
         cumulative_score += sparse_reward
         state = next_state
         step_count += 1
