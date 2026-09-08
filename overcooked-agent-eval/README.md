@@ -17,21 +17,9 @@ Run `git submodule update --init --recursive` from the repository root first if 
 
 ## Experiments
 
-### Random baseline
+### 🌟 Gameplay rendering (Featured)
 
-Runs two built-in random agents on `cramped_room`. Both agents sample from every available action, including `interact`, using a fixed seed so the run can be repeated.
-
-```bash
-python experiments/run_random_baseline.py
-```
-
-The script prints a short summary and creates `results/random_baseline_cramped_room.csv`. The CSV contains the episode number, timestep, each agent's action, timestep sparse reward, per-agent shaped rewards, cumulative sparse reward, and both player positions.
-
-Optional settings are available with `python experiments/run_random_baseline.py --help`.
-
-### Gameplay rendering
-
-Render Overcooked-AI gameplay live in an interactive Pygame desktop window, export to an MP4 video, or replay existing CSV telemetry.
+Render Overcooked-AI gameplay live in an interactive Pygame desktop window, play interactively as Chef 0, export to an MP4 video, or replay existing CSV telemetry.
 
 ```bash
 # 1. Live Pygame desktop window (default when GUI is available)
@@ -40,7 +28,7 @@ python experiments/render_gameplay.py
 # 2. Interactive human mode: Play as Chef 0 with keyboard against an AI partner
 python experiments/render_gameplay.py --agent-0 human
 
-# 3. Export episode to an MP4 video
+# 3. Export episode to an MP4 video (headless-safe)
 python experiments/render_gameplay.py --mode video --horizon 200 --output results/gameplay.mp4
 
 # 4. Replay a previously recorded CSV telemetry run
@@ -57,6 +45,18 @@ python experiments/render_gameplay.py --layout asymmetric_advantages --fps 15
 - `R`: Restart episode
 - `ESC` / `Q`: Exit window cleanly
 - **Human Player Controls (`--agent-0 human`):** `WASD` / `Arrow Keys` to move; `SPACE` / `ENTER` / `F` to interact (pick up, drop, chop, cook).
+
+### Random baseline
+
+Runs two built-in random agents on `cramped_room`. Both agents sample from every available action, including `interact`, using a fixed seed so the run can be repeated.
+
+```bash
+python experiments/run_random_baseline.py
+```
+
+The script prints a short summary and creates `results/random_baseline_cramped_room.csv`. The CSV contains the episode number, timestep, each agent's action, timestep sparse reward, per-agent shaped rewards, cumulative sparse reward, and both player positions.
+
+Optional settings are available with `python experiments/run_random_baseline.py --help`.
 
 
 ### Summarising results
