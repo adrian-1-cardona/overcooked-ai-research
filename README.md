@@ -2,30 +2,23 @@
 
 This repository contains Adrian Cardona's senior project research on cooperative AI agents in Overcooked-AI, completed under the guidance of Professor Rodrigo Canaan.
 
-Research question: *How do different cooperative agent strategies affect team performance, coordination quality, and partner compatibility in Overcooked-AI?*
-
 ## Requirements
-
 - Git
 - Python 3.10 (`>=3.10,<3.11`)
 
 ## Setup
-
 Clone the repository with its Overcooked-AI submodule:
-
 ```bash
 git clone --recurse-submodules https://github.com/adrian-1-cardona/overcooked-ai-research.git
 cd overcooked-ai-research
 ```
 
 For an existing clone, initialize the submodule from the repository root:
-
 ```bash
 git submodule update --init --recursive
 ```
 
 Create the project environment and install Overcooked-AI with its dependencies, including Pygame:
-
 ```bash
 python3.10 -m venv overcooked-agent-eval/.venv
 source overcooked-agent-eval/.venv/bin/activate
