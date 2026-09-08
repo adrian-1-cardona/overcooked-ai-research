@@ -13,21 +13,29 @@ Bring Overcooked-AI to life! This research workspace features a high-performance
 Whether you want to **watch AI agents coordinate live in a desktop window**, **play as Chef 0 with your keyboard**, **export MP4 gameplay videos headlessly**, or **visually replay recorded experiment trajectories**, you can do it all with a single unified command:
 
 ```bash
+# ⚡ Quickest One-Line Launch (auto-uses .venv):
+./render.sh
+
+# Or using the root launcher:
+python render.py
+
 # 1. Watch AI agents play live in an interactive Pygame desktop window
-python overcooked-agent-eval/experiments/render_gameplay.py
+python render.py
 
 # 2. Jump in and play as Chef 0 using WASD / Arrow keys alongside an AI partner!
-python overcooked-agent-eval/experiments/render_gameplay.py --agent-0 human
+python render.py --agent-0 human
 
 # 3. Export episode gameplay to an MP4 video (works headlessly too)
-python overcooked-agent-eval/experiments/render_gameplay.py --mode video --horizon 200 --output overcooked-agent-eval/results/gameplay.mp4
+python render.py --mode video --horizon 200 --output overcooked-agent-eval/results/gameplay.mp4
 
 # 4. Visually replay a previously recorded experiment CSV
-python overcooked-agent-eval/experiments/render_gameplay.py --replay-csv overcooked-agent-eval/results/random_baseline_cramped_room.csv
+python render.py --replay-csv overcooked-agent-eval/results/random_baseline_cramped_room.csv
 
 # 5. Explore different kitchen layouts at custom playback speeds
-python overcooked-agent-eval/experiments/render_gameplay.py --layout asymmetric_advantages --fps 15
+python render.py --layout asymmetric_advantages --fps 15
 ```
+
+> **Note:** You can also run via the full path `python overcooked-agent-eval/experiments/render_gameplay.py [options]`.
 
 ### 🎮 Interactive Window Controls
 
@@ -154,11 +162,13 @@ python overcooked-agent-eval/experiments/summarize_episode_metrics.py \
 ```text
 overcooked-ai-research/
 ├── README.md                      # Main research overview & gameplay renderer guide
+├── render.py                      # ⚡ One-line root gameplay renderer launcher
+├── render.sh                      # ⚡ Executable one-line shell launcher
 ├── external/                      # Git submodules
 │   └── overcooked_ai/             # Upstream Overcooked-AI benchmark (read-only)
 ├── overcooked-agent-eval/         # Evaluation framework
 │   ├── experiments/
-│   │   ├── render_gameplay.py     # 🌟 Gameplay visualizer, interactive player & exporter
+│   │   ├── render_gameplay.py     # 🌟 Core gameplay visualizer, player & exporter
 │   │   ├── run_random_baseline.py # Reproducible baseline experiment runner
 │   │   └── summarize_episode_metrics.py # Result summarizer
 │   ├── tests/

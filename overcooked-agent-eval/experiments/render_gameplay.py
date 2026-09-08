@@ -8,9 +8,7 @@ video export, and CSV replay.
 from __future__ import annotations
 
 import argparse
-import copy
 import csv
-import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -374,7 +372,7 @@ def run_window_rendering(
             else:
                 joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-            next_state, sparse_reward, done, info = env.step(joint_action)
+            next_state, sparse_reward, done, _ = env.step(joint_action)
             cumulative_score += sparse_reward
             state = next_state
             step_count += 1
@@ -459,7 +457,7 @@ def run_video_export(
         else:
             joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-        next_state, sparse_reward, done, info = env.step(joint_action)
+        next_state, sparse_reward, done, _ = env.step(joint_action)
         cumulative_score += sparse_reward
         state = next_state
         step_count += 1
@@ -522,7 +520,7 @@ def run_frames_export(
         else:
             joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-        next_state, sparse_reward, done, info = env.step(joint_action)
+        next_state, sparse_reward, done, _ = env.step(joint_action)
         cumulative_score += sparse_reward
         state = next_state
         step_count += 1

@@ -21,7 +21,6 @@ if str(AGENT_EVAL_DIR) not in sys.path:
 if str(EXPERIMENTS_DIR) not in sys.path:
     sys.path.insert(0, str(EXPERIMENTS_DIR))
 
-import numpy as np
 import pygame
 
 from overcooked_ai_py.mdp.actions import Action, Direction
