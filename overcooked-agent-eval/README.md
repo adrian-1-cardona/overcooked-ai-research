@@ -17,7 +17,7 @@ Run `git submodule update --init --recursive` from the repository root first if 
 
 ## Experiments
 
-### 🌟 Gameplay rendering (Featured)
+### Gameplay rendering
 
 Render Overcooked-AI gameplay live in an interactive Pygame desktop window, play interactively as Chef 0, export to an MP4 video, or replay existing CSV telemetry.
 

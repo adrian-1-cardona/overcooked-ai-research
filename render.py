@@ -40,16 +40,43 @@ COMMANDS TO RUN (from project root):
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 AGENT_EVAL_DIR = REPO_ROOT / "overcooked-agent-eval"
+VENV_DIR = AGENT_EVAL_DIR / ".venv"
+VENV_PYTHON = VENV_DIR / "bin" / "python"
+
+
+def _restart_in_project_venv() -> None:
+    """Use the project environment even when the caller did not activate it."""
+    if Path(sys.prefix).resolve() == VENV_DIR.resolve():
+        return
+
+    if VENV_PYTHON.is_file():
+        os.execv(
+            str(VENV_PYTHON),
+            [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]],
+        )
+
+
+_restart_in_project_venv()
 
 if str(AGENT_EVAL_DIR) not in sys.path:
     sys.path.insert(0, str(AGENT_EVAL_DIR))
 
-from experiments.render_gameplay import main
+try:
+    from experiments.render_gameplay import main
+except ModuleNotFoundError as error:
+    raise SystemExit(
+        f"Renderer dependency '{error.name}' is not installed.\n"
+        "Set up the project environment with:\n"
+        "  python3.10 -m venv overcooked-agent-eval/.venv\n"
+        "  overcooked-agent-eval/.venv/bin/python -m pip install "
+        "-e ./external/overcooked_ai"
+    ) from error
 
 if __name__ == "__main__":
     main()

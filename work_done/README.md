@@ -4,7 +4,7 @@ This directory tracks the architectural, engineering, and scientific progress of
 
 ---
 
-## 📋 Mandatory Repository Rule: Milestone Folder Standard
+## Mandatory Repository Rule: Milestone Folder Standard
 
 To ensure rigorous scientific reproducibility, transparent project history, and publication-ready documentation, **every project milestone must have a dedicated folder (`work_done/milestone_X/`)** containing comprehensive documentation.
 
@@ -21,7 +21,7 @@ To ensure rigorous scientific reproducibility, transparent project history, and 
 
 ---
 
-## 🗂️ Milestone Directory Index
+## Milestone Directory Index
 
 - **[Milestone 1: Baseline Sanity Check](milestone_1/README.md)**  
   *Status:* Completed & Merged (PR #1)  
