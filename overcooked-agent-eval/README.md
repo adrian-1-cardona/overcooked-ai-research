@@ -36,6 +36,13 @@ python experiments/render_gameplay.py --replay-csv results/random_baseline_cramp
 
 # 5. Render on different kitchen layouts at custom FPS
 python experiments/render_gameplay.py --layout asymmetric_advantages --fps 15
+
+# 6. Automatically generate and display Matplotlib performance graphs when done
+python experiments/render_gameplay.py --plot
+python experiments/render_gameplay.py --agent-0 human --plot
+
+# 7. Plot dashboard from any existing telemetry CSV
+python experiments/plot_run.py results/random_baseline_cramped_room.csv
 ```
 
 **Window Controls:**

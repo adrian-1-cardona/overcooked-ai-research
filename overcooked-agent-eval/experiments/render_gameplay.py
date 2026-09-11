@@ -73,6 +73,7 @@ DEFAULT_FPS = 10
 DEFAULT_TILE_SIZE = 75
 DEFAULT_OUTPUT_VIDEO = AGENT_EVAL_DIR / "results" / "gameplay.mp4"
 DEFAULT_OUTPUT_FRAMES = AGENT_EVAL_DIR / "results" / "frames"
+DEFAULT_LAST_RUN_CSV = AGENT_EVAL_DIR / "results" / "last_render_run.csv"
 
 ACTION_NAME_TO_ACTION: dict[str, Any] = {
     "north": Direction.NORTH,
@@ -82,6 +83,26 @@ ACTION_NAME_TO_ACTION: dict[str, Any] = {
     "stay": Action.STAY,
     "interact": Action.INTERACT,
 }
+
+ACTION_TO_ACTION_NAME: dict[Any, str] = {
+    Direction.NORTH: "north",
+    Direction.SOUTH: "south",
+    Direction.EAST: "east",
+    Direction.WEST: "west",
+    Action.STAY: "stay",
+    Action.INTERACT: "interact",
+    (0, -1): "north",
+    (0, 1): "south",
+    (1, 0): "east",
+    (-1, 0): "west",
+    (0, 0): "stay",
+    "interact": "interact",
+}
+
+
+def action_to_name(action: Any) -> str:
+    """Return a readable action name string."""
+    return ACTION_TO_ACTION_NAME.get(action, str(action))
 
 
 class StayAgent(Agent):
@@ -183,6 +204,27 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Episode number to replay if CSV contains multiple episodes (default: 1)",
     )
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Generate and display Matplotlib performance & coordination dashboard when finished",
+    )
+    parser.add_argument(
+        "--save-csv",
+        type=Path,
+        default=DEFAULT_LAST_RUN_CSV,
+        help=f"Path to save per-timestep run telemetry CSV (default: {DEFAULT_LAST_RUN_CSV})",
+    )
+    parser.add_argument(
+        "--no-save-csv",
+        action="store_true",
+        help="Disable automatic saving of run telemetry CSV",
+    )
+    parser.add_argument(
+        "--no-show",
+        action="store_true",
+        help="Save plot image without displaying interactive Matplotlib window (headless-friendly)",
+    )
     args = parser.parse_args()
 
     if args.horizon < 1:
@@ -279,6 +321,46 @@ def load_replay_actions(
     return detected_layout, actions
 
 
+def handle_run_completion(
+    recorded_rows: list[dict[str, Any]],
+    agents: list[Agent],
+    layout_name: str,
+    save_csv: Path | None,
+    plot: bool,
+    no_show: bool,
+) -> None:
+    """Save recorded telemetry to CSV and/or generate Matplotlib dashboard."""
+    if not recorded_rows:
+        return
+
+    if save_csv is not None:
+        save_csv.parent.mkdir(parents=True, exist_ok=True)
+        with save_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(recorded_rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(recorded_rows)
+        print(f"\n[Telemetry Saved] Recorded {len(recorded_rows)} steps to: {save_csv.resolve()}")
+
+    if plot:
+        from experiments.plot_run import plot_run_dashboard
+
+        plot_out = (
+            save_csv.parent / f"{save_csv.stem}_summary.png"
+            if save_csv is not None
+            else AGENT_EVAL_DIR / "results" / "last_run_summary.png"
+        )
+        a0_label = "Human Player" if isinstance(agents[0], HumanAgent) else agents[0].__class__.__name__
+        a1_label = "Human Player" if isinstance(agents[1], HumanAgent) else agents[1].__class__.__name__
+        plot_run_dashboard(
+            rows=recorded_rows,
+            layout_name=layout_name,
+            agent_0_label=a0_label,
+            agent_1_label=a1_label,
+            output_path=plot_out,
+            show=not no_show,
+        )
+
+
 def run_window_rendering(
     env: OvercookedEnv,
     agents: list[Agent],
@@ -287,6 +369,9 @@ def run_window_rendering(
     initial_fps: int,
     layout_name: str,
     replay_actions: list[tuple[Any, Any]] | None = None,
+    save_csv: Path | None = None,
+    plot: bool = False,
+    no_show: bool = False,
 ) -> None:
     """Render gameplay live in an interactive Pygame desktop window."""
     pygame.init()
@@ -298,6 +383,7 @@ def run_window_rendering(
     step_count = 0
     fps = initial_fps
     is_paused = False
+    recorded_rows: list[dict[str, Any]] = []
     human_mode = any(isinstance(a, HumanAgent) for a in agents)
     human_agent: HumanAgent | None = next((a for a in agents if isinstance(a, HumanAgent)), None)
 
@@ -354,6 +440,7 @@ def run_window_rendering(
                     state = env.state
                     cumulative_score = 0
                     step_count = 0
+                    recorded_rows.clear()
                     is_paused = False
                     update_caption()
 
@@ -403,11 +490,30 @@ def run_window_rendering(
             else:
                 joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-            next_state, sparse_reward, done, _ = env.step(joint_action)
+            next_state, sparse_reward, done, info = env.step(joint_action)
             cumulative_score += sparse_reward
             state = next_state
             step_count += 1
             update_caption()
+
+            shaped = [0.0, 0.0]
+            if isinstance(info, dict) and "shaped_r_by_agent" in info:
+                shaped = info["shaped_r_by_agent"]
+
+            recorded_rows.append({
+                "episode": 1,
+                "timestep": step_count,
+                "agent_0_action": action_to_name(joint_action[0]),
+                "agent_1_action": action_to_name(joint_action[1]),
+                "sparse_reward": float(sparse_reward),
+                "agent_0_shaped_reward": float(shaped[0]),
+                "agent_1_shaped_reward": float(shaped[1]),
+                "cumulative_sparse_reward": float(cumulative_score),
+                "agent_0_position": repr(state.players[0].position),
+                "agent_1_position": repr(state.players[1].position),
+                "done": done,
+                "layout_name": layout_name,
+            })
 
             if done or step_count >= horizon:
                 is_paused = True
@@ -430,6 +536,15 @@ def run_window_rendering(
     pygame.quit()
     print("Window closed. Exiting.")
 
+    handle_run_completion(
+        recorded_rows=recorded_rows,
+        agents=agents,
+        layout_name=layout_name,
+        save_csv=save_csv,
+        plot=plot,
+        no_show=no_show,
+    )
+
 
 def run_video_export(
     env: OvercookedEnv,
@@ -440,6 +555,9 @@ def run_video_export(
     layout_name: str,
     output_path: Path,
     replay_actions: list[tuple[Any, Any]] | None = None,
+    save_csv: Path | None = None,
+    plot: bool = False,
+    no_show: bool = False,
 ) -> None:
     """Render gameplay and save as an MP4 video file using OpenCV."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -447,6 +565,7 @@ def run_video_export(
     state = env.state
     cumulative_score = 0
     step_count = 0
+    recorded_rows: list[dict[str, Any]] = []
 
     hud_data = StateVisualizer.default_hud_data(
         state,
@@ -488,10 +607,29 @@ def run_video_export(
         else:
             joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-        next_state, sparse_reward, done, _ = env.step(joint_action)
+        next_state, sparse_reward, done, info = env.step(joint_action)
         cumulative_score += sparse_reward
         state = next_state
         step_count += 1
+
+        shaped = [0.0, 0.0]
+        if isinstance(info, dict) and "shaped_r_by_agent" in info:
+            shaped = info["shaped_r_by_agent"]
+
+        recorded_rows.append({
+            "episode": 1,
+            "timestep": step_count,
+            "agent_0_action": action_to_name(joint_action[0]),
+            "agent_1_action": action_to_name(joint_action[1]),
+            "sparse_reward": float(sparse_reward),
+            "agent_0_shaped_reward": float(shaped[0]),
+            "agent_1_shaped_reward": float(shaped[1]),
+            "cumulative_sparse_reward": float(cumulative_score),
+            "agent_0_position": repr(state.players[0].position),
+            "agent_1_position": repr(state.players[1].position),
+            "done": done,
+            "layout_name": layout_name,
+        })
 
         hud_data = StateVisualizer.default_hud_data(
             state,
@@ -515,6 +653,15 @@ def run_video_export(
     print(f"Final Score  : {cumulative_score}")
     print(f"Output Video : {output_path.resolve()} ({file_size_kb:.1f} KB)")
 
+    handle_run_completion(
+        recorded_rows=recorded_rows,
+        agents=agents,
+        layout_name=layout_name,
+        save_csv=save_csv,
+        plot=plot,
+        no_show=no_show,
+    )
+
 
 def run_frames_export(
     env: OvercookedEnv,
@@ -524,6 +671,9 @@ def run_frames_export(
     layout_name: str,
     output_dir: Path,
     replay_actions: list[tuple[Any, Any]] | None = None,
+    save_csv: Path | None = None,
+    plot: bool = False,
+    no_show: bool = False,
 ) -> None:
     """Render gameplay and save consecutive PNG image frames to a directory."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -531,6 +681,7 @@ def run_frames_export(
     state = env.state
     cumulative_score = 0
     step_count = 0
+    recorded_rows: list[dict[str, Any]] = []
 
     print(f"Rendering {horizon} steps as PNG frames into: {output_dir.resolve()}...")
 
@@ -551,10 +702,29 @@ def run_frames_export(
         else:
             joint_action = tuple(agent.action(state)[0] for agent in agents)
 
-        next_state, sparse_reward, done, _ = env.step(joint_action)
+        next_state, sparse_reward, done, info = env.step(joint_action)
         cumulative_score += sparse_reward
         state = next_state
         step_count += 1
+
+        shaped = [0.0, 0.0]
+        if isinstance(info, dict) and "shaped_r_by_agent" in info:
+            shaped = info["shaped_r_by_agent"]
+
+        recorded_rows.append({
+            "episode": 1,
+            "timestep": step_count,
+            "agent_0_action": action_to_name(joint_action[0]),
+            "agent_1_action": action_to_name(joint_action[1]),
+            "sparse_reward": float(sparse_reward),
+            "agent_0_shaped_reward": float(shaped[0]),
+            "agent_1_shaped_reward": float(shaped[1]),
+            "cumulative_sparse_reward": float(cumulative_score),
+            "agent_0_position": repr(state.players[0].position),
+            "agent_1_position": repr(state.players[1].position),
+            "done": done,
+            "layout_name": layout_name,
+        })
 
         hud_data = StateVisualizer.default_hud_data(
             state,
@@ -574,6 +744,15 @@ def run_frames_export(
     print("\nFrames rendering complete!")
     print(f"Total Frames Saved: {step_count + 1}")
     print(f"Output Directory  : {output_dir.resolve()}")
+
+    handle_run_completion(
+        recorded_rows=recorded_rows,
+        agents=agents,
+        layout_name=layout_name,
+        save_csv=save_csv,
+        plot=plot,
+        no_show=no_show,
+    )
 
 
 def main() -> None:
@@ -618,6 +797,9 @@ def main() -> None:
         create_agent(args.agent_1, 1, mdp),
     ]
 
+    # Resolve CSV saving path
+    save_csv_path: Path | None = None if args.no_save_csv else args.save_csv
+
     # Resolve mode
     mode = args.mode
     if mode == "auto":
@@ -638,6 +820,9 @@ def main() -> None:
                 initial_fps=args.fps,
                 layout_name=layout,
                 replay_actions=replay_actions,
+                save_csv=save_csv_path,
+                plot=args.plot,
+                no_show=args.no_show,
             )
             return
 
@@ -652,6 +837,9 @@ def main() -> None:
             layout_name=layout,
             output_path=output_video,
             replay_actions=replay_actions,
+            save_csv=save_csv_path,
+            plot=args.plot,
+            no_show=args.no_show,
         )
     elif mode == "frames":
         output_frames = args.output or DEFAULT_OUTPUT_FRAMES
@@ -663,6 +851,9 @@ def main() -> None:
             layout_name=layout,
             output_dir=output_frames,
             replay_actions=replay_actions,
+            save_csv=save_csv_path,
+            plot=args.plot,
+            no_show=args.no_show,
         )
 
 

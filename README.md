@@ -40,9 +40,16 @@ Common alternatives:
 
 ```bash
 python render.py --agent-0 human
+python render.py --plot
+python render.py --agent-0 human --plot
 python render.py --mode video --horizon 200 --output overcooked-agent-eval/results/gameplay.mp4
 python render.py --replay-csv overcooked-agent-eval/results/random_baseline_cramped_room.csv
 python render.py --help
+```
+
+To visualize metrics and graphs from any completed run CSV:
+```bash
+python overcooked-agent-eval/experiments/plot_run.py overcooked-agent-eval/results/random_baseline_cramped_room.csv
 ```
 
 In human mode, use WASD or the arrow keys to move and Space, Enter, or F to interact. See [`overcooked-agent-eval/README.md`](overcooked-agent-eval/README.md) for window controls and additional examples.

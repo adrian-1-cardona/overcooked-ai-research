@@ -33,7 +33,11 @@ COMMANDS TO RUN (from project root):
 6. Export step-by-step PNG image frames:
      python render.py --mode frames --horizon 50 --output overcooked-agent-eval/results/frames
 
-7. View all CLI options:
+7. Measure and plot Matplotlib dashboard automatically after render:
+     python render.py --plot
+     python render.py --agent-0 human --plot
+
+8. View all CLI options:
      python render.py --help
 ==============================================================================
 """
