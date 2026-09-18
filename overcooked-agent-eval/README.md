@@ -65,6 +65,151 @@ The script prints a short summary and creates `results/random_baseline_cramped_r
 
 Optional settings are available with `python experiments/run_random_baseline.py --help`.
 
+### Pretrained BC/PPO comparison
+
+Compare the pretrained behavior-cloning partner with its PPO_BC teammate against
+the PPO_SP self-play baseline. The experiment evaluates BC in both player seats,
+runs the same total number of self-play episodes, and writes one summary row per
+episode.
+
+```bash
+# Install the pretrained-agent dependencies once (Python 3.10)
+python -m pip install -r requirements-harl.txt
+
+# Apple Silicon only: Ray 2.0's declared gRPC wheel is Intel-only
+python -m pip install --no-deps grpcio==1.51.3
+```
+
+#### Running the pretrained comparison
+
+Run the standard comparison with the bundled `cramped_room` checkpoints. This
+runs BC + PPO_BC in both player orders and the PPO_SP self-play baseline:
+
+```bash
+python experiments/run_pretrained_policy_comparison.py \
+  --layout cramped_room \
+  --episodes 20
+```
+
+Run fewer episodes while keeping the full 400-step gridworld horizon:
+
+```bash
+python experiments/run_pretrained_policy_comparison.py \
+  --layout cramped_room \
+  --episodes 5 \
+  --horizon 400 \
+  --seed 42 \
+  --output results/cramped_room_bc_ppo_comparison.csv
+```
+
+Enforce the original paper-era 64-feature BC and 20-channel PPO observation
+contract when using matching older checkpoints:
+
+```bash
+python experiments/run_pretrained_policy_comparison.py \
+  --layout cramped_room \
+  --episodes 20 \
+  --strict-paper-observations
+```
+
+Run against custom PPO_BC and PPO_SP checkpoint directories:
+
+```bash
+python experiments/run_pretrained_policy_comparison.py \
+  --layout cramped_room \
+  --episodes 20 \
+  --ppo-bc-checkpoint /path/to/ppo_bc_run \
+  --ppo-sp-checkpoint /path/to/ppo_sp_run \
+  --output results/custom_pretrained_comparison.csv
+```
+
+BC and PPO_SP intentionally use different observation adapters. BC receives the
+handcrafted player-centric feature vector (distances to pots, dishes, onions,
+and related state), while PPO_SP receives lossless spatial grid masks. The
+paper-era checkpoints used 64 features and 20 channels; the current bundled
+Overcooked-AI revision emits 96 features and 26 channels, so the runner records
+the actual shapes. Pass `--strict-paper-observations` when evaluating an older
+checkpoint that must enforce the original 64/20 contract.
+
+Use `--ppo-bc-checkpoint` and `--ppo-sp-checkpoint` to evaluate other saved Ray
+runs. Results default to `results/pretrained_policy_comparison.csv`.
+
+#### Testing the pretrained comparison
+
+Run the focused unit tests first:
+
+```bash
+python -m unittest discover -s tests -p 'test_pretrained_policy_comparison.py' -v
+```
+
+Then run a short end-to-end smoke test that restores both pretrained
+checkpoints and exercises both observation encoders:
+
+```bash
+python experiments/run_pretrained_policy_comparison.py \
+  --layout cramped_room \
+  --episodes 1 \
+  --horizon 20 \
+  --output results/pretrained_policy_smoke_test.csv
+```
+
+For a full-length validation episode, change `--horizon 20` to
+`--horizon 400`. To run every project test, use:
+
+```bash
+MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  python -m unittest discover -s tests -v
+```
+
+### Human-proxy coordination analysis
+
+The compatibility analysis pairs the frozen BC human-behavior proxy with both
+its PPO_BC teammate and the PPO_SP policy. It also runs PPO_SP self-play as the
+in-distribution baseline, evaluates BC in both player seats, and keeps each
+condition balanced at the same total number of episodes.
+
+Run the complete analysis, including full-horizon rollouts, numerical
+coordination diagnostics, a comparison graph, timestep telemetry, and MP4
+replays of the exact evaluated trajectories:
+
+```bash
+python experiments/analyze_human_model_coordination.py \
+  --layout cramped_room \
+  --episodes 5 \
+  --horizon 400 \
+  --seed 42 \
+  --output-dir results/human_model_coordination
+```
+
+Run a faster end-to-end smoke test without video export:
+
+```bash
+python experiments/analyze_human_model_coordination.py \
+  --layout cramped_room \
+  --episodes 1 \
+  --horizon 20 \
+  --no-video \
+  --output-dir results/human_model_coordination_smoke
+```
+
+Test the analysis logic directly:
+
+```bash
+python -m unittest discover -s tests -p 'test_human_model_coordination.py' -v
+```
+
+The output directory contains `episode_metrics.csv`, full `telemetry.csv`,
+`comparison.png`, a concise generated report, and one representative MP4 per
+condition unless `--no-video` is used. The graph reports return alongside joint
+stationary time, blocked movement, and longest delivery drought. These are
+transparent diagnostics of coordination lock, not causal proof; the BC policy
+is a repeatable human-model proxy rather than a new human-subject study.
+
+This same episode-metrics schema is the comparison boundary for future
+evolutionary or LLM planning agents: add their condition rows, then compare
+returns and coordination diagnostics against `BC+PPO_BC`, `BC+PPO_SP`, and
+`PPO_SP+PPO_SP` in the generated graph.
+
 
 ### Summarising results
 
