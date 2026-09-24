@@ -1,2 +1,3 @@
 # Install the checked-out Overcooked-AI submodule and its dependencies.
 -e ../external/overcooked_ai
+matplotlib>=3.7.0
