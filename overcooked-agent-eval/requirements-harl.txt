@@ -1,0 +1,16 @@
+# CPU-compatible dependencies for restoring the bundled Human-Aware RL assets.
+-r requirements.txt
+
+GitPython>=3.1
+dm-tree>=0.1.8
+gym==0.23.1
+keras==2.11.0
+lz4>=4.0
+numpy==1.23.5
+protobuf==3.19.6
+ray[rllib,tune]==2.0.0
+scikit-image==0.20.0
+setuptools==80.9.0
+tensorflow-macos==2.11.0; sys_platform == "darwin" and platform_machine == "arm64"
+tensorflow==2.11.0; sys_platform != "darwin" or platform_machine != "arm64"
+tensorboardX==2.5.1
