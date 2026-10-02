@@ -1,70 +1,82 @@
 """
-Utility helpers for simple rule‑based agents.
-Provides a minimal BFS implementation that works with the Overcooked
-environment map format (a 2‑D list of ints where 0 = empty, 1 = wall).
-The functions are deliberately lightweight – just enough for the
-GreedySymbolSearchAgent used in the demo.
+Utility helpers for rule-based agents in Overcooked-AI.
+Provides orientation-aware A* search and grid path planning functions.
 """
-import collections
-from typing import List, Tuple, Optional
+import heapq
+from typing import List, Tuple, Optional, Set
 
-def bfs_find_nearest(grid: List[List[int]], start: Tuple[int, int], targets: List[Tuple[int, int]]) -> Optional[List[Tuple[int, int]]]:
-    """Return a shortest path from *start* to the closest position in *targets*.
-    If no reachable target exists, returns ``None``.
-    The path is a list of grid coordinates, **including** the start cell.
+NORTH = (0, -1)
+SOUTH = (0, 1)
+EAST = (1, 0)
+WEST = (-1, 0)
+DIRECTIONS = [NORTH, SOUTH, EAST, WEST]
+
+
+def a_star_search(
+    terrain_mtx: List[List[str]],
+    start_pos: Tuple[int, int],
+    start_orient: Tuple[int, int],
+    target_counter_pos: Tuple[int, int],
+    obstacles: Optional[Set[Tuple[int, int]]] = None
+) -> Optional[List[Tuple[int, int]]]:
+    """Orientation-aware A* search over the Overcooked gridworld.
+
+    State space: (x, y, orientation).
+    Target: standing adjacent to target_counter_pos AND facing target_counter_pos.
+    Path cost g(n): 1 per translation step, 1 per orientation turn.
+    Heuristic h(n): Manhattan distance to target_counter_pos + turn penalty.
     """
-    rows, cols = len(grid), len(grid[0])
-    visited = [[False] * cols for _ in range(rows)]
-    queue = collections.deque()
-    queue.append((start, [start]))
-    visited[start[0]][start[1]] = True
-    target_set = set(targets)
-    while queue:
-        (r, c), path = queue.popleft()
-        if (r, c) in target_set:
+    if obstacles is None:
+        obstacles = set()
+
+    tx, ty = target_counter_pos
+    height = len(terrain_mtx)
+    width = len(terrain_mtx[0])
+
+    def is_walkable(x: int, y: int) -> bool:
+        if 0 <= x < width and 0 <= y < height:
+            if (x, y) in obstacles:
+                return False
+            return terrain_mtx[y][x] == ' '
+        return False
+
+    def heuristic(x: int, y: int, orient: Tuple[int, int]) -> int:
+        dist = abs(x - tx) + abs(y - ty)
+        if (x + orient[0], y + orient[1]) != (tx, ty):
+            dist += 1
+        return dist
+
+    start_state = (start_pos[0], start_pos[1], start_orient)
+    h_start = heuristic(start_pos[0], start_pos[1], start_orient)
+    pq = [(h_start, 0, start_state, [])]
+    visited = {}
+
+    while pq:
+        f, g, (x, y, orient), path = heapq.heappop(pq)
+
+        # Goal check: standing at walkable cell adjacent to target_counter_pos and facing it
+        if (x + orient[0], y + orient[1]) == (tx, ty):
             return path
-        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < rows and 0 <= nc < cols and not visited[nr][nc] and grid[nr][nc] == 0:
-                visited[nr][nc] = True
-                queue.append(((nr, nc), path + [(nr, nc)]))
+
+        state_key = (x, y, orient)
+        if state_key in visited and visited[state_key] <= g:
+            continue
+        visited[state_key] = g
+
+        # 1. Forward movement in current orientation
+        nx, ny = x + orient[0], y + orient[1]
+        if is_walkable(nx, ny):
+            next_state = (nx, ny, orient)
+            if next_state not in visited or visited[next_state] > g + 1:
+                h = heuristic(nx, ny, orient)
+                heapq.heappush(pq, (g + 1 + h, g + 1, next_state, path + [orient]))
+
+        # 2. Orientation turns (staying in same cell)
+        for d in DIRECTIONS:
+            if d != orient:
+                next_state = (x, y, d)
+                if next_state not in visited or visited[next_state] > g + 1:
+                    h = heuristic(x, y, d)
+                    heapq.heappush(pq, (g + 1 + h, g + 1, next_state, path + [d]))
+
     return None
-
-def plan_moves_from_path(path: List[Tuple[int, int]]) -> List[int]:
-    """Convert a coordinate path into primitive Overcooked action indices.
-    The Overcooked action space (in the upstream repo) uses the following
-    integer mapping:
-        0 – ``Direction.NORTH``
-        1 – ``Direction.SOUTH``
-        2 – ``Direction.EAST``
-        3 – ``Direction.WEST``
-        4 – ``Action.INTERACT``
-        5 – ``Action.STAY``
-    This helper only returns movement actions; ``INTERACT`` and ``STAY``
-    are added by the agent logic when needed.
-    """
-    moves = []
-    for (r1, c1), (r2, c2) in zip(path, path[1:]):
-        if r2 == r1 - 1:
-            moves.append(0)  # NORTH
-        elif r2 == r1 + 1:
-            moves.append(1)  # SOUTH
-        elif c2 == c1 + 1:
-            moves.append(2)  # EAST
-        elif c2 == c1 - 1:
-            moves.append(3)  # WEST
-        else:
-            raise ValueError("Non‑adjacent steps in path")
-    return moves
-
-def get_needed_ingredients(state) -> List[Tuple[int, int]]:
-    """Extract the positions of still‑needed ingredients from an Overcooked state.
-    The concrete implementation depends on the exact state object used by the
-    repo (``state.ingredients`` or similar).  Here we provide a placeholder that
-    looks for a ``.ingredients`` attribute containing a list of ``(row, col)``
-    tuples.  If the attribute is missing we simply return an empty list – the
-    greedy agent will then wander.
-    """
-    if hasattr(state, "ingredients"):
-        return list(state.ingredients)
-    return []
