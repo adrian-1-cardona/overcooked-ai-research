@@ -1,13 +1,12 @@
-"""
-Greedy Symbol‑Search Agent for Overcooked‑AI.
-It repeatedly:
-  1️⃣ Looks at which ingredients are still needed.
-  2️⃣ Runs a BFS (from utils.bfs_find_nearest) to the closest needed tile.
-  3️⃣ Converts the path into primitive move actions (N,S,E,W).
-  4️⃣ When on an ingredient, issues an INTERACT action to pick it up.
-  5️⃣ When carrying something and next to a serving plate, issues INTERACT to drop.
-If no reachable ingredient exists, the agent wanders randomly.
-"""
+##Greedy Symbol‑Search Agent for Overcooked‑AI.
+##It repeatedly:
+##  1️⃣ Looks at which ingredients are still needed.
+##  2️⃣ Runs a BFS (from utils.bfs_find_nearest) to the closest needed tile.
+##  3️⃣ Converts the path into primitive move actions (N,S,E,W).
+##  4️⃣ When on an ingredient, issues an INTERACT action to pick it up.
+##  5️⃣ When carrying something and next to a serving plate, issues INTERACT to drop.
+## If no reachable ingredient exists, the agent wanders randomly.
+
 import random
 from typing import List, Tuple
 
@@ -63,4 +62,4 @@ class GreedySymbolSearchAgent:
         #    Here we just issue INTERACT again – the environment will handle the
         #    valid drop if we are adjacent to a plate.
         return Action.INTERACT
-"
+
