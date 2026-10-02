@@ -2,7 +2,7 @@ import random
 from typing import List, Tuple
 
 from overcooked_ai_py.agents.agent import Agent
-from overcooked_ai_py.mdp.actions import Action
+from overcooked_ai_py.mdp.actions import Action, Direction
 
 # Helper utilities from our local agents package
 from .utils import bfs_find_nearest, plan_moves_from_path, get_needed_ingredients
@@ -50,10 +50,10 @@ class GreedySymbolSearchAgent(Agent):
         if not needed:
             # No work left – wander randomly.
             return random.choice([
-                Action.MOVE_NORTH,
-                Action.MOVE_SOUTH,
-                Action.MOVE_EAST,
-                Action.MOVE_WEST,
+                Direction.NORTH,
+                Direction.SOUTH,
+                Direction.EAST,
+                Direction.WEST,
             ]), {}
 
         # 2️⃣ Locate this agent's current position in the layout graph.
@@ -64,10 +64,10 @@ class GreedySymbolSearchAgent(Agent):
         if path is None:
             # Unreachable – fall back to random wandering.
             return random.choice([
-                Action.MOVE_NORTH,
-                Action.MOVE_SOUTH,
-                Action.MOVE_EAST,
-                Action.MOVE_WEST,
+                Direction.NORTH,
+                Direction.SOUTH,
+                Direction.EAST,
+                Direction.WEST,
             ]), {}
 
         # 4️⃣ Convert the path to a primitive move (ignore the first node – our position).
@@ -75,10 +75,10 @@ class GreedySymbolSearchAgent(Agent):
             move_seq = plan_moves_from_path(path)
             move_idx = move_seq[0]
             primitive = [
-                Action.MOVE_NORTH,
-                Action.MOVE_SOUTH,
-                Action.MOVE_EAST,
-                Action.MOVE_WEST,
+                Direction.NORTH,
+                Direction.SOUTH,
+                Direction.EAST,
+                Direction.WEST,
             ][move_idx]
             return primitive, {}
 
