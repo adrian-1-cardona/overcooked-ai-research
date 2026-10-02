@@ -41,6 +41,17 @@ Control **Chef 0** with WASD / Arrow keys while **Chef 1** is controlled by the 
 python render.py --agent-0 human --agent-1 greedy --layout cramped_room
 ```
 
+### 2. Running the Upstream Baseline Agent (`upstream`)
+You can also run the official Overcooked-AI upstream planner (`GreedyHumanModel`) against a human or head-to-head against our custom greedy agent:
+
+```bash
+# Play Human vs. Upstream Baseline Agent
+python render.py --agent-0 human --agent-1 upstream --layout cramped_room
+
+# Head-to-Head: Custom Greedy Agent vs. Upstream Agent
+python render.py --agent-0 greedy --agent-1 upstream --layout cramped_room
+```
+
 **Controls:**
 - `[WASD / Arrow Keys]` : Move North, South, West, East
 - `[SPACE / ENTER / F]` : Interact (pick up items, drop, chop, cook)

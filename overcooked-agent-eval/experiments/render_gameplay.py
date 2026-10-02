@@ -170,14 +170,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--agent-0",
         type=str,
-        choices=["random", "stay", "human", "greedy"],
+        choices=["random", "stay", "human", "greedy", "upstream"],
         default="random",
         help="Policy for Agent 0 (default: random)",
     )
     parser.add_argument(
         "--agent-1",
         type=str,
-        choices=["random", "stay", "greedy"],
+        choices=["random", "stay", "greedy", "upstream"],
         default="random",
         help="Policy for Agent 1 (default: random)",
     )
@@ -245,6 +245,11 @@ def create_agent(name: str, index: int, mdp: OvercookedGridworld) -> Agent:
         agent = HumanAgent()
     elif name == "greedy":
         agent = GreedySymbolSearchAgent()
+    elif name == "upstream":
+        from overcooked_ai_py.agents.agent import GreedyHumanModel
+        from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+        mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
+        agent = GreedyHumanModel(mlam)
     else:
         raise ValueError(f"Unknown agent type: {name}")
 
