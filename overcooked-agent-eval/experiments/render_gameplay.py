@@ -50,6 +50,8 @@ AGENT_EVAL_DIR = CURRENT_FILE.parents[1]
 REPO_ROOT = AGENT_EVAL_DIR.parent
 EXTERNAL_OVERCOOKED = REPO_ROOT / "external" / "overcooked_ai" / "src"
 
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(EXTERNAL_OVERCOOKED) not in sys.path:
     sys.path.insert(0, str(EXTERNAL_OVERCOOKED))
 if str(AGENT_EVAL_DIR) not in sys.path:
