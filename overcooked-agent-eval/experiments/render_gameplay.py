@@ -50,6 +50,8 @@ AGENT_EVAL_DIR = CURRENT_FILE.parents[1]
 REPO_ROOT = AGENT_EVAL_DIR.parent
 EXTERNAL_OVERCOOKED = REPO_ROOT / "external" / "overcooked_ai" / "src"
 
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(EXTERNAL_OVERCOOKED) not in sys.path:
     sys.path.insert(0, str(EXTERNAL_OVERCOOKED))
 if str(AGENT_EVAL_DIR) not in sys.path:
@@ -60,6 +62,7 @@ import numpy as np
 import pygame
 
 from overcooked_ai_py.agents.agent import Agent, RandomAgent
+from agents.greedy_symbol_search import GreedySymbolSearchAgent
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, OvercookedState
@@ -169,14 +172,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--agent-0",
         type=str,
-        choices=["random", "stay", "human"],
+        choices=["random", "stay", "human", "greedy", "upstream"],
         default="random",
         help="Policy for Agent 0 (default: random)",
     )
     parser.add_argument(
         "--agent-1",
         type=str,
-        choices=["random", "stay"],
+        choices=["random", "stay", "greedy", "upstream"],
         default="random",
         help="Policy for Agent 1 (default: random)",
     )
@@ -242,6 +245,13 @@ def create_agent(name: str, index: int, mdp: OvercookedGridworld) -> Agent:
         agent = StayAgent()
     elif name == "human":
         agent = HumanAgent()
+    elif name == "greedy":
+        agent = GreedySymbolSearchAgent()
+    elif name == "upstream":
+        from overcooked_ai_py.agents.agent import GreedyHumanModel
+        from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+        mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
+        agent = GreedyHumanModel(mlam)
     else:
         raise ValueError(f"Unknown agent type: {name}")
 
