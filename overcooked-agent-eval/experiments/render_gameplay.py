@@ -60,6 +60,7 @@ import numpy as np
 import pygame
 
 from overcooked_ai_py.agents.agent import Agent, RandomAgent
+from agents.greedy_symbol_search import GreedySymbolSearchAgent
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, OvercookedState
@@ -169,14 +170,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--agent-0",
         type=str,
-        choices=["random", "stay", "human"],
+        choices=["random", "stay", "human", "greedy"],
         default="random",
         help="Policy for Agent 0 (default: random)",
     )
     parser.add_argument(
         "--agent-1",
         type=str,
-        choices=["random", "stay"],
+        choices=["random", "stay", "greedy"],
         default="random",
         help="Policy for Agent 1 (default: random)",
     )
@@ -242,6 +243,8 @@ def create_agent(name: str, index: int, mdp: OvercookedGridworld) -> Agent:
         agent = StayAgent()
     elif name == "human":
         agent = HumanAgent()
+    elif name == "greedy":
+        agent = GreedySymbolSearchAgent()
     else:
         raise ValueError(f"Unknown agent type: {name}")
 

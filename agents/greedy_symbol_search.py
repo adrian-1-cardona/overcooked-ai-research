@@ -1,65 +1,91 @@
-##Greedy Symbol‑Search Agent for Overcooked‑AI.
-##It repeatedly:
-##  1️⃣ Looks at which ingredients are still needed.
-##  2️⃣ Runs a BFS (from utils.bfs_find_nearest) to the closest needed tile.
-##  3️⃣ Converts the path into primitive move actions (N,S,E,W).
-##  4️⃣ When on an ingredient, issues an INTERACT action to pick it up.
-##  5️⃣ When carrying something and next to a serving plate, issues INTERACT to drop.
-## If no reachable ingredient exists, the agent wanders randomly.
-
 import random
 from typing import List, Tuple
 
+from overcooked_ai_py.agents.agent import Agent
+from overcooked_ai_py.mdp.actions import Action
+
+# Helper utilities from our local agents package
 from .utils import bfs_find_nearest, plan_moves_from_path, get_needed_ingredients
-from overcooked_ai_py.mdp.actions import Action, Direction
 
-class GreedySymbolSearchAgent:
-    def __init__(self, env):
-        self.env = env
-        self.carrying = None  # simple flag for what we hold
+class GreedySymbolSearchAgent(Agent):
+    """Greedy symbol‑search agent for Overcooked‑AI.
 
+    The agent repeatedly:
+    1. Finds which ingredients are still needed.
+    2. Uses BFS to locate the nearest needed ingredient.
+    3. Moves toward it using primitive actions (N/S/E/W).
+    4. Interacts to pick up an ingredient when on the tile.
+    5. Interacts again to drop the held item (the environment will handle
+       the drop if a serving plate is adjacent).
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.carrying: bool = False
+
+    # ---------------------------------------------------------------------
+    # Helper to obtain positions of still‑needed ingredients.
+    # ---------------------------------------------------------------------
     def _ingredients_positions(self, state) -> List[Tuple[int, int]]:
-        """Return a list of grid cells that still contain needed ingredients.
-        This wrapper uses the generic helper ``get_needed_ingredients`` which
-        expects the state to expose an ``ingredients`` attribute.  If the repo
-        uses a different field you can adjust this method accordingly.
+        """Return a list of (row, col) coordinates for needed ingredients.
+
+        The repository provides ``get_needed_ingredients`` which extracts those
+        tiles from the ``state`` object. Adjust this method if the state
+        representation changes.
         """
         return get_needed_ingredients(state)
 
-    def act(self, obs):
-        """Return a **single** primitive action for the current timestep.
-        ``obs`` is the raw Observation object supplied by the Overcooked
-        environment.  We extract the underlying game state via ``obs.state``
-        (the standard attribute in the upstream repo).
+    # ---------------------------------------------------------------------
+    # Core Agent API method.
+    # ---------------------------------------------------------------------
+    def action(self, state) -> tuple[Action, dict]:
+        """Return a primitive ``Action`` for the current timestep.
+
+        ``state`` is an ``OvercookedState`` instance supplied by the environment.
+        The method returns ``(action, {})`` – an empty info dictionary satisfies
+        the ``Agent`` interface used throughout the codebase.
         """
-        state = obs.state
-        # 1️⃣  What do we still need?
+        # 1️⃣ Determine which ingredients are still needed.
         needed = self._ingredients_positions(state)
         if not needed:
-            # nothing left – just wander
-            return random.choice([Action.MOVE_NORTH, Action.MOVE_SOUTH, Action.MOVE_EAST, Action.MOVE_WEST])
+            # No work left – wander randomly.
+            return random.choice([
+                Action.MOVE_NORTH,
+                Action.MOVE_SOUTH,
+                Action.MOVE_EAST,
+                Action.MOVE_WEST,
+            ]), {}
 
-        # 2️⃣  Find closest needed tile with BFS
-        start = obs.agent_pos  # (row, col) of our chef
-        path = bfs_find_nearest(self.env.layout.graph, start, needed)
+        # 2️⃣ Locate this agent's current position in the layout graph.
+        start = self.mdp.layout.start_positions[self.agent_index]
+
+        # 3️⃣ Find the shortest path to the nearest needed tile.
+        path = bfs_find_nearest(self.mdp.layout.graph, start, needed)
         if path is None:
-            # unreachable -> wander
-            return random.choice([Action.MOVE_NORTH, Action.MOVE_SOUTH, Action.MOVE_EAST, Action.MOVE_WEST])
+            # Unreachable – fall back to random wandering.
+            return random.choice([
+                Action.MOVE_NORTH,
+                Action.MOVE_SOUTH,
+                Action.MOVE_EAST,
+                Action.MOVE_WEST,
+            ]), {}
 
-        # 3️⃣  Convert path to primitive moves (ignore first element – it's our position)
+        # 4️⃣ Convert the path to a primitive move (ignore the first node – our position).
         if len(path) > 1:
             move_seq = plan_moves_from_path(path)
-            # return the *first* move in the sequence for this timestep
             move_idx = move_seq[0]
-            return [Action.MOVE_NORTH, Action.MOVE_SOUTH, Action.MOVE_EAST, Action.MOVE_WEST][move_idx]
+            primitive = [
+                Action.MOVE_NORTH,
+                Action.MOVE_SOUTH,
+                Action.MOVE_EAST,
+                Action.MOVE_WEST,
+            ][move_idx]
+            return primitive, {}
 
-        # 4️⃣  We're already on the ingredient – interact to pick up
+        # 5️⃣ We're on a needed ingredient – pick it up.
         if not self.carrying:
             self.carrying = True
-            return Action.INTERACT
+            return Action.INTERACT, {}
 
-        # 5️⃣  If we have something, try to drop on nearest plate (simplified)
-        #    Here we just issue INTERACT again – the environment will handle the
-        #    valid drop if we are adjacent to a plate.
-        return Action.INTERACT
-
+        # 6️⃣ Already holding something – attempt to drop (simplified).
+        return Action.INTERACT, {}
