@@ -183,14 +183,16 @@ class OvercookedApp:
             # Calculate optimal tile size so the visualizer generates crisp sprites
             grid_w = len(self.mdp.terrain_mtx[0])
             grid_h = len(self.mdp.terrain_mtx)
-            tile_w = self.game_pane_width / grid_w
-            tile_h = (self.window_height - 100) / grid_h
-            optimal_tile_size = max(40, min(180, int(min(tile_w, tile_h))))
+            pad = 40
+            avail_w = max(100, self.game_pane_width - pad * 2)
+            avail_h = max(100, self.window_height - pad * 2)
+            optimal_tile_size = max(40, min(180, int(min(avail_w / grid_w, avail_h / grid_h))))
 
             self.visualizer = StateVisualizer(
                 tile_size=optimal_tile_size,
                 player_colors=["red", "blue"],  # Agent 1 = Red Hat, Agent 2 = Blue Hat
-                is_rendering_hud=True,
+                is_rendering_hud=False,         # Clean kitchen view; sidebar shows stats cleanly
+                background_color=BG_GAME_FRAME,
             )
 
             # Check PPO availability notification
@@ -558,24 +560,35 @@ class OvercookedApp:
         self.window.fill(BG_WINDOW)
 
         # ----------------------------------------------------
-        # 1. Left Game Canvas Pane (Entire size)
+        # 1. Left Game Canvas Pane
         # ----------------------------------------------------
+        pygame.draw.rect(
+            self.window, BG_GAME_FRAME, (0, 0, self.game_pane_width, self.window_height)
+        )
+
         if self.env is not None and self.visualizer is not None:
-            time_left = max(0, self.horizon - self.step_count)
-            hud_data = StateVisualizer.default_hud_data(
-                self.env.state,
-                score=self.cumulative_score,
-                time_left=time_left,
-            )
             game_surface = self.visualizer.render_state(
-                self.env.state, self.env.mdp.terrain_mtx, hud_data=hud_data
+                self.env.state, self.env.mdp.terrain_mtx
             )
 
-            # Stretch/scale to completely fill the entire left pane!
-            scaled_surface = pygame.transform.smoothscale(
-                game_surface, (self.game_pane_width, self.window_height)
-            )
-            self.window.blit(scaled_surface, (0, 0))
+            # Preserve exact square tile aspect ratio (no stretching or distortion)
+            orig_w, orig_h = game_surface.get_size()
+            pad = 24
+            avail_w = max(10, self.game_pane_width - pad * 2)
+            avail_h = max(10, self.window_height - pad * 2)
+            scale = min(avail_w / orig_w, avail_h / orig_h)
+            new_w = max(1, int(orig_w * scale))
+            new_h = max(1, int(orig_h * scale))
+
+            if (new_w, new_h) != (orig_w, orig_h):
+                scaled_surface = pygame.transform.smoothscale(game_surface, (new_w, new_h))
+            else:
+                scaled_surface = game_surface
+
+            # Center the kitchen inside the left canvas frame
+            offset_x = (self.game_pane_width - new_w) // 2
+            offset_y = (self.window_height - new_h) // 2
+            self.window.blit(scaled_surface, (offset_x, offset_y))
 
         # Vertical divider line separating game pane and sidebar
         pygame.draw.line(

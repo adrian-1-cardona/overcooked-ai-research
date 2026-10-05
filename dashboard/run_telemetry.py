@@ -15,16 +15,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-st.set_page_config(page_title="Overcooked Gameplay Telemetry", page_icon="🍳", layout="wide")
+st.set_page_config(page_title="Overcooked Gameplay Telemetry", layout="wide")
 
-st.title("🍳 Overcooked Agent Run Telemetry Dashboard")
+st.title("Overcooked Agent Run Telemetry Dashboard")
 
 # Default CSV file location
 DEFAULT_CSV = "overcooked-agent-eval/results/last_render_run.csv"
 ALT_CSV = "results/last_render_run.csv"
 
 # Sidebar file selector / uploader
-st.sidebar.header("📁 Data Source")
+st.sidebar.header("Data Source")
 
 selected_path = None
 if os.path.exists(DEFAULT_CSV):
@@ -60,7 +60,7 @@ col4.metric("Episodes", f"{episodes}")
 st.markdown("---")
 
 # --- CHARTS SECTION ---
-tab1, tab2, tab3 = st.tabs(["📈 Reward Curve", "🤖 Action Distribution", "📄 Raw Data"])
+tab1, tab2, tab3 = st.tabs(["Reward Curve", "Action Distribution", "Raw Data"])
 
 with tab1:
     st.subheader("Cumulative Sparse Reward over Timesteps")
@@ -103,4 +103,4 @@ with tab3:
     st.subheader("Telemetry Data Table")
     st.dataframe(df, use_container_width=True)
 
-st.caption("Overcooked-AI Telemetry Dashboard — Antigravity Research Lab")
+st.caption("Overcooked-AI Telemetry Dashboard")
