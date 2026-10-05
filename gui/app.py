@@ -29,27 +29,33 @@ from gui.theme import (
     BG_WINDOW,
     BG_GAME_FRAME,
     BG_SIDEBAR,
+    BG_GRID,
     BG_CARD,
+    BG_INPUT,
     BORDER_DEFAULT,
     BORDER_FOCUS,
     BORDER_SUBTLE,
-    BORDER_RETRO_LIGHT,
-    BORDER_RETRO_DARK,
     DIVIDER_COLOR,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_MUTED,
+    TEXT_CREAM,
     TEXT_GOLD,
+    COLOR_ACCENT_BROWN,
     COLOR_AGENT_RED,
     COLOR_AGENT_BLUE,
     COLOR_RUN,
     COLOR_RUN_HOVER,
+    COLOR_RUN_TEXT,
     COLOR_PAUSE,
     COLOR_PAUSE_HOVER,
+    COLOR_PAUSE_TEXT,
     COLOR_RESET,
     COLOR_RESET_HOVER,
+    COLOR_RESET_TEXT,
     COLOR_GRAPH,
     COLOR_GRAPH_HOVER,
+    COLOR_GRAPH_TEXT,
     COLOR_DONE_BADGE,
     FontManager,
 )
@@ -231,6 +237,7 @@ class OvercookedApp:
             on_click=self.toggle_pause,
             bg_color=COLOR_PAUSE,
             hover_color=COLOR_PAUSE_HOVER,
+            text_color=COLOR_PAUSE_TEXT,
             font_size=14,
         )
 
@@ -240,6 +247,7 @@ class OvercookedApp:
             on_click=self.reset_to_setup,
             bg_color=COLOR_RESET,
             hover_color=COLOR_RESET_HOVER,
+            text_color=COLOR_RESET_TEXT,
             font_size=14,
         )
 
@@ -249,7 +257,8 @@ class OvercookedApp:
             on_click=self.handle_run_or_restart_click,
             bg_color=COLOR_RUN,
             hover_color=COLOR_RUN_HOVER,
-            font_size=15,
+            text_color=COLOR_RUN_TEXT,
+            font_size=14,
         )
 
         # View Graph button (ONLY appears and functions when DONE)
@@ -259,6 +268,7 @@ class OvercookedApp:
             on_click=self.open_streamlit_dashboard,
             bg_color=COLOR_GRAPH,
             hover_color=COLOR_GRAPH_HOVER,
+            text_color=COLOR_GRAPH_TEXT,
             font_size=13,
         )
         self.btn_view_graph.is_visible = False
@@ -569,10 +579,31 @@ class OvercookedApp:
         )
 
         # ----------------------------------------------------
-        # 2. Right Control Sidebar
+        # 2. Right Control Sidebar (RetroUI "Muddy" Brown Theme)
         # ----------------------------------------------------
+        sb_start_x = self.game_pane_width
         sb_x = self.game_pane_width + 16
         sb_w = SIDEBAR_WIDTH - 32
+
+        # Sidebar background fill
+        pygame.draw.rect(
+            self.window, BG_SIDEBAR, (sb_start_x, 0, SIDEBAR_WIDTH, self.window_height)
+        )
+
+        # RetroUI 24px subtle graph grid
+        for gx in range(sb_start_x, self.window_width + 1, 24):
+            pygame.draw.line(self.window, BG_GRID, (gx, 0), (gx, self.window_height), 1)
+        for gy in range(0, self.window_height + 1, 24):
+            pygame.draw.line(self.window, BG_GRID, (sb_start_x, gy), (self.window_width, gy), 1)
+
+        # Chunky 3px solid divider separating game canvas and sidebar
+        pygame.draw.line(
+            self.window,
+            DIVIDER_COLOR,
+            (sb_start_x, 0),
+            (sb_start_x, self.window_height),
+            width=3,
+        )
 
         # Header Title
         font_title = FontManager.get_font(18, bold=True)
@@ -587,7 +618,7 @@ class OvercookedApp:
         elif self.state == AppState.PAUSED:
             UIBanner.draw(self.window, (sb_x + sb_w - 84, 16, 84, 26), "PAUSED", COLOR_PAUSE, font_size=11, bold=True)
         else:
-            UIBanner.draw(self.window, (sb_x + sb_w - 78, 16, 78, 26), "READY", (55, 65, 95), font_size=11, bold=False)
+            UIBanner.draw(self.window, (sb_x + sb_w - 78, 16, 78, 26), "READY", BG_INPUT, text_color=TEXT_PRIMARY, font_size=11, bold=True)
 
         # Agent 1 Section
         lbl_font = FontManager.get_font(13, bold=True)
@@ -623,7 +654,7 @@ class OvercookedApp:
         self.window.blit(hint_surf, (sb_x + lay_lbl.get_width() + 10, 240))
         self.dropdown_layout.draw(self.window)
 
-        # Telemetry & Status Card
+        # Telemetry & Status Card (RetroUI White Card with chunky border and drop shadow)
         card_y = 315
         card_h = 135
         UICard.draw(self.window, (sb_x, card_y, sb_w, card_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT)
@@ -640,19 +671,22 @@ class OvercookedApp:
         self.window.blit(m_score, (sb_x + 12, card_y + 58))
         self.window.blit(m_speed, (sb_x + 12, card_y + 82))
 
-        # Progress bar
+        # RetroUI Progress bar container: white background, 2px border, 2px shadow
         prog_pct = min(1.0, self.step_count / self.horizon) if self.horizon > 0 else 0
-        pbar_rect = pygame.Rect(sb_x + 12, card_y + 110, sb_w - 24, 8)
-        pygame.draw.rect(self.window, (16, 20, 30), pbar_rect, border_radius=2)
+        pbar_rect = pygame.Rect(sb_x + 12, card_y + 108, sb_w - 24, 12)
+        shadow_pbar = pbar_rect.move(2, 2)
+        pygame.draw.rect(self.window, BORDER_DEFAULT, shadow_pbar)
+        pygame.draw.rect(self.window, (255, 255, 255), pbar_rect)
         if prog_pct > 0:
-            fill_rect = pygame.Rect(sb_x + 12, card_y + 110, int((sb_w - 24) * prog_pct), 8)
-            p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else (129, 140, 248)
-            pygame.draw.rect(self.window, p_color, fill_rect, border_radius=2)
+            fill_rect = pygame.Rect(sb_x + 14, card_y + 110, int((sb_w - 28) * prog_pct), 8)
+            p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else COLOR_ACCENT_BROWN
+            pygame.draw.rect(self.window, p_color, fill_rect)
+        pygame.draw.rect(self.window, BORDER_DEFAULT, pbar_rect, width=2)
 
-        # Controls & Help Card
+        # Controls & Help Card (RetroUI Card)
         help_y = card_y + card_h + 14
         help_h = 105
-        UICard.draw(self.window, (sb_x, help_y, sb_w, help_h), bg_color=(24, 28, 40), border_color=BORDER_SUBTLE)
+        UICard.draw(self.window, (sb_x, help_y, sb_w, help_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT)
         help_t = card_title_font.render("KEYBOARD CONTROLS", True, TEXT_MUTED)
         self.window.blit(help_t, (sb_x + 12, help_y + 8))
 
@@ -667,11 +701,11 @@ class OvercookedApp:
         # Warning / Info Message if any
         if self.warning_message:
             warn_font = FontManager.get_font(10, bold=False)
-            warn_surf = warn_font.render(self.warning_message, True, (251, 191, 36))
+            warn_surf = warn_font.render(self.warning_message, True, COLOR_PAUSE)
             self.window.blit(warn_surf, (sb_x, help_y + help_h + 8))
 
         # ----------------------------------------------------
-        # Dynamic Action Buttons Layout
+        # Dynamic Action Buttons Layout (RetroUI Drop-Shadow Buttons)
         # ----------------------------------------------------
         btn_y = self.window_height - 64
         half_w = (sb_w - 12) // 2
@@ -682,6 +716,7 @@ class OvercookedApp:
             self.btn_run.text = "RUN"
             self.btn_run.bg_color = COLOR_RUN
             self.btn_run.hover_color = COLOR_RUN_HOVER
+            self.btn_run.text_color = COLOR_RUN_TEXT
             self.btn_run.is_visible = True
             self.btn_run.draw(self.window)
 
@@ -713,6 +748,7 @@ class OvercookedApp:
             self.btn_run.text = "RUN AGAIN"
             self.btn_run.bg_color = COLOR_RUN
             self.btn_run.hover_color = COLOR_RUN_HOVER
+            self.btn_run.text_color = COLOR_RUN_TEXT
             self.btn_run.is_visible = True
             self.btn_run.draw(self.window)
 

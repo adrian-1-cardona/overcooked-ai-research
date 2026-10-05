@@ -30,53 +30,57 @@ WINDOW_DEFAULT_HEIGHT = 760
 SIDEBAR_WIDTH = 340
 HEADER_HEIGHT = 50
 
-# Retro Arcade Dark Theme Palette
-BG_WINDOW: Color = (16, 18, 28)            # Deep arcade midnight
-BG_GAME_FRAME: Color = (10, 12, 18)        # Crisp screen backing
-BG_SIDEBAR: Color = (24, 28, 42)           # Arcade cabinet sidebar
-BG_CARD: Color = (32, 38, 56)              # Beveled card module
-BG_CARD_HOVER: Color = (42, 50, 74)        # Card hover state
-BG_INPUT: Color = (20, 24, 36)             # Recessed dark slot
-BG_INPUT_HOVER: Color = (34, 40, 60)       # Dropdown hover
-BG_INPUT_ACTIVE: Color = (46, 54, 82)      # Active / pressed input
+# RetroUI "Muddy" Brown Theme Palette (from retroui.io/components)
+BG_WINDOW: Color = (191, 184, 172)          # RetroUI pageBg (#bfb8ac)
+BG_GAME_FRAME: Color = (28, 22, 16)         # Deep contrast backing for game canvas
+BG_SIDEBAR: Color = (191, 184, 172)         # RetroUI muddy sidebar (#bfb8ac)
+BG_GRID: Color = (178, 171, 158)            # Subtle 24px pixel grid line
+BG_CARD: Color = (255, 255, 255)            # RetroUI cardBg (#ffffff)
+BG_CARD_HOVER: Color = (250, 248, 242)      # Soft card hover
+BG_INPUT: Color = (221, 206, 180)           # RetroUI muddy bg tan (#ddceb4)
+BG_INPUT_HOVER: Color = (233, 221, 201)     # Warm input hover
+BG_INPUT_ACTIVE: Color = (206, 188, 158)    # Active / pressed input
 
-# Retro 3D Bevel Borders
-BORDER_DEFAULT: Color = (55, 65, 95)
-BORDER_FOCUS: Color = (129, 140, 248)       # Neon highlight
-BORDER_SUBTLE: Color = (38, 45, 68)
-BORDER_RETRO_LIGHT: Color = (85, 100, 145) # Bevel top-left light
-BORDER_RETRO_DARK: Color = (12, 14, 22)    # Bevel bottom-right shadow
-DIVIDER_COLOR: Color = (45, 54, 80)
+# RetroUI Chunky Pixel Borders & Hard Drop-Shadows
+BORDER_DEFAULT: Color = (48, 33, 11)        # RetroUI muddy border & shadow (#30210b)
+BORDER_FOCUS: Color = (98, 71, 31)          # RetroUI cocoa accent (#62471f)
+BORDER_SUBTLE: Color = (150, 135, 115)      # Warm subtle divider/border
+BORDER_RETRO_LIGHT: Color = (245, 238, 225) # Soft highlight
+BORDER_RETRO_DARK: Color = (48, 33, 11)     # Hard pixel shadow (#30210b)
+DIVIDER_COLOR: Color = (48, 33, 11)         # Solid 3px divider (#30210b)
 
 # Typography Colors
-TEXT_PRIMARY: Color = (245, 245, 252)      # Crisp off-white pixel text
-TEXT_SECONDARY: Color = (180, 190, 215)    # Arcade silver
-TEXT_MUTED: Color = (120, 130, 155)        # Muted gray
-TEXT_GOLD: Color = (255, 215, 64)          # Arcade score gold
-TEXT_DARK: Color = (17, 24, 39)
+TEXT_PRIMARY: Color = (48, 33, 11)          # RetroUI deep espresso text (#30210b)
+TEXT_SECONDARY: Color = (104, 82, 60)       # Warm medium brown (#68523c)
+TEXT_MUTED: Color = (140, 122, 102)         # Muted brown
+TEXT_CREAM: Color = (254, 252, 208)         # RetroUI cream text (#fefcd0)
+TEXT_GOLD: Color = (196, 126, 26)           # Warm retro score gold (#c47e1a)
+TEXT_DARK: Color = (48, 33, 11)
 
-# Retro Arcade Accents
-COLOR_AGENT_RED: Color = (235, 55, 70)     # 1P Arcade Red
-COLOR_AGENT_BLUE: Color = (45, 125, 245)   # 2P Arcade Blue
+# RetroUI Component Accents
+COLOR_ACCENT_BROWN: Color = (98, 71, 31)    # RetroUI signature cocoa brown (#62471f)
+COLOR_AGENT_RED: Color = (201, 64, 56)      # Retro 1P Warm Red (#c94038)
+COLOR_AGENT_BLUE: Color = (59, 119, 168)    # Retro 2P Slate Blue (#3b77a8)
 
-COLOR_RUN: Color = (0, 205, 115)           # Arcade Start Green
-COLOR_RUN_HOVER: Color = (0, 175, 95)
-COLOR_RUN_TEXT: Color = (255, 255, 255)
+# Buttons (RetroUI Hard Pixel Drop-Shadow Style)
+COLOR_RUN: Color = (98, 71, 31)             # RetroUI brown primary accent (#62471f)
+COLOR_RUN_HOVER: Color = (120, 88, 40)
+COLOR_RUN_TEXT: Color = (254, 252, 208)     # Cream text on dark cocoa
 
-COLOR_PAUSE: Color = (250, 160, 25)        # Arcade Pause Amber
-COLOR_PAUSE_HOVER: Color = (220, 140, 15)
+COLOR_PAUSE: Color = (207, 134, 42)         # Warm honey amber (#cf862a)
+COLOR_PAUSE_HOVER: Color = (185, 118, 32)
 COLOR_PAUSE_TEXT: Color = (255, 255, 255)
 
-COLOR_RESET: Color = (235, 65, 80)         # Arcade Reset Ruby/Crimson
-COLOR_RESET_HOVER: Color = (205, 45, 60)
+COLOR_RESET: Color = (196, 67, 58)          # Warm terracotta red (#c4433a)
+COLOR_RESET_HOVER: Color = (175, 52, 44)
 COLOR_RESET_TEXT: Color = (255, 255, 255)
 
-COLOR_GRAPH: Color = (155, 90, 245)        # Retro Neon Violet
-COLOR_GRAPH_HOVER: Color = (135, 70, 225)
-COLOR_GRAPH_TEXT: Color = (255, 255, 255)
+COLOR_GRAPH: Color = (98, 71, 31)           # RetroUI cocoa brown (#62471f)
+COLOR_GRAPH_HOVER: Color = (120, 88, 40)
+COLOR_GRAPH_TEXT: Color = (254, 252, 208)
 
-COLOR_DONE_BADGE: Color = (0, 220, 130)    # Victory Green
-COLOR_DONE_BADGE_BG: Color = (15, 55, 35)
+COLOR_DONE_BADGE: Color = (68, 128, 74)     # Retro sage/olive green (#44804a)
+COLOR_DONE_BADGE_BG: Color = (235, 245, 235)
 
 
 class FontManager:
