@@ -33,16 +33,21 @@ from gui.theme import (
     BORDER_DEFAULT,
     BORDER_FOCUS,
     BORDER_SUBTLE,
+    BORDER_RETRO_LIGHT,
+    BORDER_RETRO_DARK,
     DIVIDER_COLOR,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_MUTED,
+    TEXT_GOLD,
     COLOR_AGENT_RED,
     COLOR_AGENT_BLUE,
     COLOR_RUN,
     COLOR_RUN_HOVER,
     COLOR_PAUSE,
     COLOR_PAUSE_HOVER,
+    COLOR_RESET,
+    COLOR_RESET_HOVER,
     COLOR_GRAPH,
     COLOR_GRAPH_HOVER,
     COLOR_DONE_BADGE,
@@ -222,16 +227,25 @@ class OvercookedApp:
 
         self.btn_pause = UIButton(
             rect=(sb_x, btn_y, half_w, 44),
-            text="Pause",
+            text="PAUSE",
             on_click=self.toggle_pause,
             bg_color=COLOR_PAUSE,
             hover_color=COLOR_PAUSE_HOVER,
-            font_size=15,
+            font_size=14,
+        )
+
+        self.btn_reset = UIButton(
+            rect=(sb_x, btn_y, half_w, 44),
+            text="RESET",
+            on_click=self.reset_to_setup,
+            bg_color=COLOR_RESET,
+            hover_color=COLOR_RESET_HOVER,
+            font_size=14,
         )
 
         self.btn_run = UIButton(
             rect=(sb_x, btn_y, sb_w, 44),
-            text="Run",
+            text="RUN",
             on_click=self.handle_run_or_restart_click,
             bg_color=COLOR_RUN,
             hover_color=COLOR_RUN_HOVER,
@@ -241,11 +255,11 @@ class OvercookedApp:
         # View Graph button (ONLY appears and functions when DONE)
         self.btn_view_graph = UIButton(
             rect=(sb_x, btn_y - 54, sb_w, 44),
-            text="View Graph (Streamlit)",
+            text="VIEW GRAPH (STREAMLIT)",
             on_click=self.open_streamlit_dashboard,
             bg_color=COLOR_GRAPH,
             hover_color=COLOR_GRAPH_HOVER,
-            font_size=14,
+            font_size=13,
         )
         self.btn_view_graph.is_visible = False
 
@@ -256,6 +270,9 @@ class OvercookedApp:
         self.warning_message = None
         if new_val == "ppo" and not is_ppo_supported(self.current_layout):
             self.warning_message = f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy."
+        if self.state == AppState.DONE:
+            self.state = AppState.SETUP
+            self.btn_view_graph.is_visible = False
 
     def _on_agent_1_changed(self, new_val: str) -> None:
         if self.is_mid_run:
@@ -264,6 +281,9 @@ class OvercookedApp:
         self.warning_message = None
         if new_val == "ppo" and not is_ppo_supported(self.current_layout):
             self.warning_message = f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy."
+        if self.state == AppState.DONE:
+            self.state = AppState.SETUP
+            self.btn_view_graph.is_visible = False
 
     def _on_layout_changed(self, new_layout: str) -> None:
         """Handle live layout switching from dropdown when not mid-run."""
@@ -271,24 +291,22 @@ class OvercookedApp:
             return  # Locked mid-run
         print(f"[GUI] Layout changed live to: {new_layout}")
         self._load_environment(new_layout)
+        if self.state == AppState.DONE:
+            self.state = AppState.SETUP
+            self.btn_view_graph.is_visible = False
 
     def handle_run_or_restart_click(self) -> None:
-        """Handle primary button click: Start game in SETUP/DONE, or Restart to SETUP when mid-run."""
+        """Handle primary run button click."""
         if self.is_mid_run:
-            # Clicking Restart mid-run resets to SETUP so user can change maps/agents or run again
             self.reset_to_setup()
         else:
             self.start_game()
 
     def reset_to_setup(self) -> None:
-        """Reset the current simulation and return to SETUP state."""
-        if self.env is not None:
-            self.env.reset()
-        self.step_count = 0
-        self.cumulative_score = 0.0
-        self.recorded_rows.clear()
+        """Reset the current simulation and return to SETUP state so user can choose different agents and layouts."""
+        self._load_environment(self.current_layout)
         self.state = AppState.SETUP
-        self.status_message = "Simulation reset. You can now modify agents or layout, then click Run."
+        self.status_message = "Ready. Select agents & layout, then click RUN!"
         self.warning_message = None
         self.btn_view_graph.is_visible = False
         print("[GUI] Reset to SETUP mode.")
@@ -475,7 +493,10 @@ class OvercookedApp:
                     self.toggle_pause()
 
                 elif event.key == pygame.K_r:
-                    self.handle_run_or_restart_click()
+                    if self.is_mid_run or self.state == AppState.DONE:
+                        self.reset_to_setup()
+                    else:
+                        self.start_game()
 
                 # Dispatch keyboard input to interactive human agents
                 if self.state == AppState.RUNNING and self.agents:
@@ -500,17 +521,19 @@ class OvercookedApp:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     for dd in dropdowns:
                         if dd.rect.collidepoint(event.pos):
-                            mode_str = "paused" if self.state == AppState.PAUSED else "running"
-                            self.status_message = f"Locked while {mode_str}. Click Restart to change values."
+                            mode_str = "PAUSED" if self.state == AppState.PAUSED else "RUNNING"
+                            self.status_message = f"Locked while {mode_str}. Click RESET to change values."
 
             # Buttons events
             if self.is_mid_run:
                 self.btn_pause.handle_event(event)
-            self.btn_run.handle_event(event)
-
-            # View Graph event: ONLY handled when DONE
-            if self.state == AppState.DONE:
+                self.btn_reset.handle_event(event)
+            elif self.state == AppState.SETUP:
+                self.btn_run.handle_event(event)
+            elif self.state == AppState.DONE:
                 self.btn_view_graph.handle_event(event)
+                self.btn_reset.handle_event(event)
+                self.btn_run.handle_event(event)
 
     def _draw_frame(self) -> None:
         """Render the complete application frame with full-sized environment and clean sidebar."""
@@ -553,49 +576,51 @@ class OvercookedApp:
 
         # Header Title
         font_title = FontManager.get_font(18, bold=True)
-        title_surf = font_title.render("Overcooked-AI", True, TEXT_PRIMARY)
+        title_surf = font_title.render("OVERCOOKED-AI", True, TEXT_PRIMARY)
         self.window.blit(title_surf, (sb_x, 18))
 
         # Status Banner (Top right of sidebar)
         if self.state == AppState.DONE:
-            UIBanner.draw(self.window, (sb_x + sb_w - 78, 16, 78, 26), "Done!", (16, 185, 129), font_size=13, bold=True)
+            UIBanner.draw(self.window, (sb_x + sb_w - 94, 16, 94, 26), "GAME OVER", COLOR_DONE_BADGE, font_size=11, bold=True)
         elif self.state == AppState.RUNNING:
-            UIBanner.draw(self.window, (sb_x + sb_w - 84, 16, 84, 26), "Running", (16, 185, 129), font_size=12, bold=True)
+            UIBanner.draw(self.window, (sb_x + sb_w - 84, 16, 84, 26), "RUNNING", COLOR_RUN, font_size=11, bold=True)
         elif self.state == AppState.PAUSED:
-            UIBanner.draw(self.window, (sb_x + sb_w - 84, 16, 84, 26), "Paused", (245, 158, 11), font_size=12, bold=True)
+            UIBanner.draw(self.window, (sb_x + sb_w - 84, 16, 84, 26), "PAUSED", COLOR_PAUSE, font_size=11, bold=True)
         else:
-            UIBanner.draw(self.window, (sb_x + sb_w - 78, 16, 78, 26), "Ready", (45, 52, 70), font_size=12, bold=False)
+            UIBanner.draw(self.window, (sb_x + sb_w - 78, 16, 78, 26), "READY", (55, 65, 95), font_size=11, bold=False)
 
         # Agent 1 Section
         lbl_font = FontManager.get_font(13, bold=True)
-        a0_lbl = lbl_font.render("Agent 1", True, TEXT_PRIMARY)
+        a0_lbl = lbl_font.render("AGENT 1", True, TEXT_PRIMARY)
         self.window.blit(a0_lbl, (sb_x, 68))
-        # Solid Red Hat banner styled just like the layout buttons
-        UIBanner.draw(self.window, (sb_x + sb_w - 80, 64, 80, 22), "Red Hat", COLOR_AGENT_RED)
+        # Solid Red Hat banner styled right next to the letter
+        a0_badge_x = sb_x + a0_lbl.get_width() + 10
+        UIBanner.draw(self.window, (a0_badge_x, 65, 78, 22), "RED HAT", COLOR_AGENT_RED, font_size=10, bold=True)
         self.dropdown_agent_0.draw(self.window)
 
         # Agent 2 Section
-        a1_lbl = lbl_font.render("Agent 2", True, TEXT_PRIMARY)
+        a1_lbl = lbl_font.render("AGENT 2", True, TEXT_PRIMARY)
         self.window.blit(a1_lbl, (sb_x, 153))
-        # Solid Blue Hat banner styled just like the layout buttons
-        UIBanner.draw(self.window, (sb_x + sb_w - 80, 149, 80, 22), "Blue Hat", COLOR_AGENT_BLUE)
+        # Solid Blue Hat banner styled right next to the letter
+        a1_badge_x = sb_x + a1_lbl.get_width() + 10
+        UIBanner.draw(self.window, (a1_badge_x, 150, 78, 22), "BLUE HAT", COLOR_AGENT_BLUE, font_size=10, bold=True)
         self.dropdown_agent_1.draw(self.window)
 
         # Layout Section
-        lay_lbl = lbl_font.render("Layout", True, TEXT_PRIMARY)
+        lay_lbl = lbl_font.render("STAGE / LAYOUT", True, TEXT_PRIMARY)
         self.window.blit(lay_lbl, (sb_x, 238))
-        hint_font = FontManager.get_font(11, bold=False)
+        hint_font = FontManager.get_font(10, bold=False)
         if self.state == AppState.PAUSED:
-            hint_text = "(locked while paused)"
-            hint_color = (245, 158, 11)
+            hint_text = "(LOCKED WHILE PAUSED)"
+            hint_color = COLOR_PAUSE
         elif self.state == AppState.RUNNING:
-            hint_text = "(locked while running)"
-            hint_color = (245, 158, 11)
+            hint_text = "(LOCKED WHILE RUNNING)"
+            hint_color = COLOR_PAUSE
         else:
-            hint_text = "(live preview)"
+            hint_text = "(LIVE PREVIEW)"
             hint_color = TEXT_MUTED
         hint_surf = hint_font.render(hint_text, True, hint_color)
-        self.window.blit(hint_surf, (sb_x + 60, 240))
+        self.window.blit(hint_surf, (sb_x + lay_lbl.get_width() + 10, 240))
         self.dropdown_layout.draw(self.window)
 
         # Telemetry & Status Card
@@ -603,14 +628,14 @@ class OvercookedApp:
         card_h = 135
         UICard.draw(self.window, (sb_x, card_y, sb_w, card_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT)
 
-        card_title_font = FontManager.get_font(12, bold=True)
-        card_t = card_title_font.render("RUN TELEMETRY & STATS", True, TEXT_MUTED)
+        card_title_font = FontManager.get_font(11, bold=True)
+        card_t = card_title_font.render("TELEMETRY & STATS", True, TEXT_MUTED)
         self.window.blit(card_t, (sb_x + 12, card_y + 10))
 
-        metric_font = FontManager.get_font(14, bold=False)
-        m_step = metric_font.render(f"Step: {self.step_count} / {self.horizon}", True, TEXT_PRIMARY)
-        m_score = metric_font.render(f"Score: {int(self.cumulative_score)}", True, (52, 211, 153))
-        m_speed = metric_font.render(f"Framerate: {self.fps} FPS", True, TEXT_SECONDARY)
+        metric_font = FontManager.get_font(13, bold=False)
+        m_step = metric_font.render(f"STEP: {self.step_count} / {self.horizon}", True, TEXT_PRIMARY)
+        m_score = metric_font.render(f"SCORE: {int(self.cumulative_score):04d}", True, TEXT_GOLD)
+        m_speed = metric_font.render(f"SPEED: {self.fps} FPS", True, TEXT_SECONDARY)
         self.window.blit(m_step, (sb_x + 12, card_y + 34))
         self.window.blit(m_score, (sb_x + 12, card_y + 58))
         self.window.blit(m_speed, (sb_x + 12, card_y + 82))
@@ -618,11 +643,11 @@ class OvercookedApp:
         # Progress bar
         prog_pct = min(1.0, self.step_count / self.horizon) if self.horizon > 0 else 0
         pbar_rect = pygame.Rect(sb_x + 12, card_y + 110, sb_w - 24, 8)
-        pygame.draw.rect(self.window, (20, 24, 34), pbar_rect, border_radius=4)
+        pygame.draw.rect(self.window, (16, 20, 30), pbar_rect, border_radius=2)
         if prog_pct > 0:
             fill_rect = pygame.Rect(sb_x + 12, card_y + 110, int((sb_w - 24) * prog_pct), 8)
-            p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else (99, 102, 241)
-            pygame.draw.rect(self.window, p_color, fill_rect, border_radius=4)
+            p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else (129, 140, 248)
+            pygame.draw.rect(self.window, p_color, fill_rect, border_radius=2)
 
         # Controls & Help Card
         help_y = card_y + card_h + 14
@@ -631,17 +656,17 @@ class OvercookedApp:
         help_t = card_title_font.render("KEYBOARD CONTROLS", True, TEXT_MUTED)
         self.window.blit(help_t, (sb_x + 12, help_y + 8))
 
-        h_f = FontManager.get_font(11, bold=False)
-        h1 = h_f.render("• WASD / Arrows : Move Chef 0 (Red)", True, TEXT_SECONDARY)
-        h2 = h_f.render("• Space / Enter / F : Pick up / Drop / Cook", True, TEXT_SECONDARY)
-        h3 = h_f.render("• [P] : Pause / Resume   • [R] : Restart", True, TEXT_MUTED)
+        h_f = FontManager.get_font(10, bold=False)
+        h1 = h_f.render("• WASD / ARROWS : MOVE 1P (RED)", True, TEXT_SECONDARY)
+        h2 = h_f.render("• SPACE / ENTER / F : INTERACT / COOK", True, TEXT_SECONDARY)
+        h3 = h_f.render("• [P] : PAUSE / RESUME   • [R] : RESET", True, TEXT_MUTED)
         self.window.blit(h1, (sb_x + 12, help_y + 30))
         self.window.blit(h2, (sb_x + 12, help_y + 50))
         self.window.blit(h3, (sb_x + 12, help_y + 72))
 
         # Warning / Info Message if any
         if self.warning_message:
-            warn_font = FontManager.get_font(11, bold=False)
+            warn_font = FontManager.get_font(10, bold=False)
             warn_surf = warn_font.render(self.warning_message, True, (251, 191, 36))
             self.window.blit(warn_surf, (sb_x, help_y + help_h + 8))
 
@@ -654,21 +679,23 @@ class OvercookedApp:
         if self.state == AppState.SETUP:
             # Full width Run button
             self.btn_run.rect = pygame.Rect(sb_x, btn_y, sb_w, 44)
-            self.btn_run.text = "Run"
+            self.btn_run.text = "RUN"
+            self.btn_run.bg_color = COLOR_RUN
+            self.btn_run.hover_color = COLOR_RUN_HOVER
             self.btn_run.is_visible = True
             self.btn_run.draw(self.window)
 
         elif self.state in (AppState.RUNNING, AppState.PAUSED):
-            # Side by side: Pause/Resume and Restart
+            # Side by side: Pause/Resume and Reset
             self.btn_pause.rect = pygame.Rect(sb_x, btn_y, half_w, 44)
-            self.btn_pause.text = "Resume" if self.state == AppState.PAUSED else "Pause"
+            self.btn_pause.text = "RESUME" if self.state == AppState.PAUSED else "PAUSE"
             self.btn_pause.is_visible = True
             self.btn_pause.draw(self.window)
 
-            self.btn_run.rect = pygame.Rect(sb_x + half_w + 12, btn_y, half_w, 44)
-            self.btn_run.text = "Restart"
-            self.btn_run.is_visible = True
-            self.btn_run.draw(self.window)
+            self.btn_reset.rect = pygame.Rect(sb_x + half_w + 12, btn_y, half_w, 44)
+            self.btn_reset.text = "RESET"
+            self.btn_reset.is_visible = True
+            self.btn_reset.draw(self.window)
 
         elif self.state == AppState.DONE:
             # Streamlit View Graph button ONLY appears when DONE!
@@ -676,9 +703,16 @@ class OvercookedApp:
             self.btn_view_graph.is_visible = True
             self.btn_view_graph.draw(self.window)
 
-            # Full width Run Again / Restart button
-            self.btn_run.rect = pygame.Rect(sb_x, btn_y, sb_w, 44)
-            self.btn_run.text = "Run Again"
+            # Two buttons: RESET (to clear and choose different agents/layouts) and RUN AGAIN
+            self.btn_reset.rect = pygame.Rect(sb_x, btn_y, half_w, 44)
+            self.btn_reset.text = "RESET"
+            self.btn_reset.is_visible = True
+            self.btn_reset.draw(self.window)
+
+            self.btn_run.rect = pygame.Rect(sb_x + half_w + 12, btn_y, half_w, 44)
+            self.btn_run.text = "RUN AGAIN"
+            self.btn_run.bg_color = COLOR_RUN
+            self.btn_run.hover_color = COLOR_RUN_HOVER
             self.btn_run.is_visible = True
             self.btn_run.draw(self.window)
 

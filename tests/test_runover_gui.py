@@ -119,8 +119,52 @@ class TestOvercookedGUI(unittest.TestCase):
         # Now and only now is View Graph visible!
         self.assertTrue(self.app.btn_view_graph.is_visible)
 
+    def test_game_over_reset_clears_everything(self) -> None:
+        """Verify that hitting RESET at game over clears everything and returns to SETUP."""
+        self.app.selected_agent_0_type = "greedy"
+        self.app.selected_agent_1_type = "stay"
+        self.app.start_game()
+
+        # Step until horizon is reached (DONE)
+        for _ in range(10):
+            self.app._step_simulation()
+        self.assertEqual(self.app.state, AppState.DONE)
+        self.app.handle_events()
+        self.app._draw_frame()
+
+        # Both RESET and RUN AGAIN buttons are visible, and dropdowns are unlocked
+        self.assertTrue(self.app.btn_reset.is_visible)
+        self.assertTrue(self.app.btn_run.is_visible)
+        self.assertEqual(self.app.btn_reset.text, "RESET")
+        self.assertEqual(self.app.btn_run.text, "RUN AGAIN")
+
+        # Click the RESET button
+        self.app.btn_reset.on_click()
+
+        # Check full reset to SETUP state
+        self.assertEqual(self.app.state, AppState.SETUP)
+        self.assertEqual(self.app.step_count, 0)
+        self.assertEqual(self.app.cumulative_score, 0.0)
+        self.assertEqual(len(self.app.recorded_rows), 0)
+        self.assertFalse(self.app.btn_view_graph.is_visible)
+
+        # Dropdowns are completely unlocked so user can pick different agents and layouts
+        self.app.handle_events()
+        self.assertTrue(self.app.dropdown_layout.is_enabled)
+        self.assertTrue(self.app.dropdown_agent_0.is_enabled)
+        self.assertTrue(self.app.dropdown_agent_1.is_enabled)
+
+        # User chooses different agent and layout
+        self.app.dropdown_agent_0.selected_value = "stay"
+        self.app._on_agent_0_changed("stay")
+        self.assertEqual(self.app.selected_agent_0_type, "stay")
+
+        self.app.dropdown_layout.selected_value = "coordination_ring"
+        self.app._on_layout_changed("coordination_ring")
+        self.assertEqual(self.app.current_layout, "coordination_ring")
+
     def test_restart_mid_run_returns_to_setup(self) -> None:
-        """Verify clicking Restart mid-run resets to SETUP and unlocks dropdowns."""
+        """Verify clicking Restart/Reset mid-run resets to SETUP and unlocks dropdowns."""
         self.app.selected_agent_0_type = "greedy"
         self.app.selected_agent_1_type = "stay"
         self.app.start_game()
@@ -130,8 +174,8 @@ class TestOvercookedGUI(unittest.TestCase):
             self.app._step_simulation()
         self.assertEqual(self.app.step_count, 3)
 
-        # Click Restart mid-run
-        self.app.handle_run_or_restart_click()
+        # Click Reset mid-run
+        self.app.reset_to_setup()
         self.assertEqual(self.app.state, AppState.SETUP)
         self.assertEqual(self.app.step_count, 0)
         self.app.handle_events()
@@ -139,6 +183,30 @@ class TestOvercookedGUI(unittest.TestCase):
         self.assertTrue(self.app.dropdown_agent_0.is_enabled)
         self.assertTrue(self.app.dropdown_agent_1.is_enabled)
 
+    def test_draw_frame_all_states(self) -> None:
+        """Verify rendering frames completes without error across all application states."""
+        # 1. SETUP
+        self.app._draw_frame()
+
+        # 2. RUNNING
+        self.app.selected_agent_0_type = "greedy"
+        self.app.selected_agent_1_type = "stay"
+        self.app.start_game()
+        self.app._draw_frame()
+
+        # 3. PAUSED
+        self.app.toggle_pause()
+        self.app._draw_frame()
+
+        # 4. DONE
+        self.app.state = AppState.DONE
+        self.app.step_count = self.app.horizon
+        self.app.cumulative_score = 40.0
+        self.app._draw_frame()
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
