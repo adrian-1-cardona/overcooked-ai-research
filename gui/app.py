@@ -119,8 +119,7 @@ class OvercookedApp:
         self.agent_options = [
             ("Human (Keyboard)", "human"),
             ("PPO (Pretrained RL)", "ppo"),
-            ("Greedy (BFS Search)", "greedy"),
-            ("Upstream (Baseline)", "upstream"),
+            ("Greedy Agent (Upstream)", "greedy"),
             ("Random Agent", "random"),
             ("Stay (Idle)", "stay"),
         ]

@@ -20,7 +20,6 @@ for p in (REPO_ROOT, AGENT_EVAL_DIR, EXTERNAL_OVERCOOKED):
 
 import pygame
 from overcooked_ai_py.agents.agent import Agent, RandomAgent
-from agents.greedy_symbol_search import GreedySymbolSearchAgent
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, OvercookedState
@@ -176,17 +175,20 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             try:
                 agent = get_ppo_agent(layout_name, agent_index, mdp)
             except Exception as e:
-                print(f"[Warning] Failed to load PPO ({e}); falling back to Greedy AI.")
-                warning = f"PPO load failed: {e}. Falling back to Greedy AI."
-                agent = GreedySymbolSearchAgent()
+                print(f"[Warning] Failed to load PPO ({e}); falling back to Upstream Greedy.")
+                warning = f"PPO load failed: {e}. Falling back to Upstream Greedy."
+                from overcooked_ai_py.agents.agent import GreedyHumanModel
+                from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+                mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
+                agent = GreedyHumanModel(mlam)
         else:
-            warning = f"No bundled PPO model for '{layout_name}'. Using Greedy AI."
-            agent = GreedySymbolSearchAgent()
+            warning = f"No bundled PPO model for '{layout_name}'. Using Upstream Greedy agent."
+            from overcooked_ai_py.agents.agent import GreedyHumanModel
+            from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+            mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
+            agent = GreedyHumanModel(mlam)
 
-    elif agent_type_lower in ("greedy", "greedy (bfs search)", "greedy_symbol_search"):
-        agent = GreedySymbolSearchAgent()
-
-    elif agent_type_lower in ("upstream", "upstream (baseline)", "greedy_human_model"):
+    elif agent_type_lower in ("greedy", "greedy agent", "greedy agent (upstream)", "upstream", "upstream (baseline)", "greedy_human_model"):
         from overcooked_ai_py.agents.agent import GreedyHumanModel
         from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
         mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
