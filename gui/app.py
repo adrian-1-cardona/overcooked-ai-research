@@ -496,6 +496,13 @@ class OvercookedApp:
                 for dd in dropdowns:
                     if dd is not open_dd:
                         dd.handle_event(event)
+            else:
+                # When locked (mid-run or paused), clicking on a dropdown provides immediate feedback
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    for dd in dropdowns:
+                        if dd.rect.collidepoint(event.pos):
+                            mode_str = "paused" if self.state == AppState.PAUSED else "running"
+                            self.status_message = f"Locked while {mode_str}. Click Restart to change values."
 
             # Buttons events
             if self.is_mid_run:
@@ -579,8 +586,15 @@ class OvercookedApp:
         lay_lbl = lbl_font.render("Layout", True, TEXT_PRIMARY)
         self.window.blit(lay_lbl, (sb_x, 238))
         hint_font = FontManager.get_font(11, bold=False)
-        hint_text = "(locked mid-run)" if self.is_mid_run else "(live preview)"
-        hint_color = (245, 158, 11) if self.is_mid_run else TEXT_MUTED
+        if self.state == AppState.PAUSED:
+            hint_text = "(locked while paused)"
+            hint_color = (245, 158, 11)
+        elif self.state == AppState.RUNNING:
+            hint_text = "(locked while running)"
+            hint_color = (245, 158, 11)
+        else:
+            hint_text = "(live preview)"
+            hint_color = TEXT_MUTED
         hint_surf = hint_font.render(hint_text, True, hint_color)
         self.window.blit(hint_surf, (sb_x + 60, 240))
         self.dropdown_layout.draw(self.window)
