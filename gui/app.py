@@ -13,12 +13,16 @@ Provides:
 from __future__ import annotations
 
 import csv
+import os
 import subprocess
 import sys
 import webbrowser
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any
+
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 import pygame
 
@@ -327,7 +331,10 @@ class OvercookedApp:
             return
 
         print(f"[GUI] Starting episode on {self.current_layout} (Agent 0: {self.selected_agent_0_type}, Agent 1: {self.selected_agent_1_type})")
-        self.status_message = "Initializing agents..."
+        if self.selected_agent_0_type == "ppo" or self.selected_agent_1_type == "ppo":
+            self.status_message = "Loading PPO neural network weights..."
+        else:
+            self.status_message = "Initializing agents..."
         self._draw_frame()
 
         # Reset environment

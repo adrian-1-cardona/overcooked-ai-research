@@ -2,13 +2,39 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Sequence
 
-# Set legacy Keras compatibility for bundled TF assets
+# Set legacy Keras compatibility and suppress TF C++ logs
 os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
+
+@contextlib.contextmanager
+def suppress_c_stderr():
+    """Silence noisy C-level and Python-level deprecation warnings during TF/Ray model loading."""
+    has_dup = False
+    try:
+        null_fd = os.open(os.devnull, os.O_RDWR)
+        save_stderr = os.dup(2)
+        os.dup2(null_fd, 2)
+        os.close(null_fd)
+        has_dup = True
+    except Exception:
+        has_dup = False
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            yield
+    finally:
+        if has_dup:
+            os.dup2(save_stderr, 2)
+            os.close(save_stderr)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AGENT_EVAL_DIR = REPO_ROOT / "overcooked-agent-eval"
@@ -141,19 +167,23 @@ def get_ppo_agent(layout_name: str, agent_index: int, mdp: OvercookedGridworld) 
     if not is_ppo_supported(layout_name):
         raise ValueError(f"Pretrained PPO model is not bundled for layout '{layout_name}'.")
 
-    from experiments.run_pretrained_policy_comparison import bundled_checkpoint, load_trainer
-    from human_aware_rl.rllib.rllib import get_agent_from_trainer
+    with suppress_c_stderr():
+        from experiments.run_pretrained_policy_comparison import bundled_checkpoint, load_trainer
+        from human_aware_rl.rllib.rllib import get_agent_from_trainer
 
     if layout_name not in _TRAINER_CACHE:
         checkpoint_path = bundled_checkpoint(layout_name, "SP")
         print(f"[PPO Loader] Initializing PPO policy from: {checkpoint_path.name}...")
-        trainer = load_trainer(checkpoint_path)
+        with suppress_c_stderr():
+            trainer = load_trainer(checkpoint_path)
         _TRAINER_CACHE[layout_name] = trainer
+        print(f"[PPO Loader] PPO policy loaded successfully.")
 
     trainer = _TRAINER_CACHE[layout_name]
-    agent = get_agent_from_trainer(trainer, policy_id="ppo", agent_index=agent_index)
-    agent.set_mdp(mdp)
-    agent.reset()
+    with suppress_c_stderr():
+        agent = get_agent_from_trainer(trainer, policy_id="ppo", agent_index=agent_index)
+        agent.set_mdp(mdp)
+        agent.reset()
     return agent
 
 

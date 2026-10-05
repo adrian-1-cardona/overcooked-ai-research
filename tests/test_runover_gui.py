@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import os
 import unittest
+import warnings
 from pathlib import Path
 
-# Ensure headless execution for testing
+# Ensure headless execution for testing and suppress library noise
 os.environ["SDL_VIDEODRIVER"] = "dummy"
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+warnings.filterwarnings("ignore")
 
 import pygame
 pygame.init()
@@ -202,7 +206,20 @@ class TestOvercookedGUI(unittest.TestCase):
         self.app.state = AppState.DONE
         self.app.step_count = self.app.horizon
         self.app.cumulative_score = 40.0
-        self.app._draw_frame()
+    def test_dual_ppo_agents_forced_coordination(self) -> None:
+        """Verify that two PPO agents can play together seamlessly on forced_coordination."""
+        self.app._on_layout_changed("forced_coordination")
+        self.app.selected_agent_0_type = "ppo"
+        self.app.selected_agent_1_type = "ppo"
+        self.app.start_game()
+        self.assertEqual(self.app.state, AppState.RUNNING)
+        self.assertEqual(len(self.app.agents), 2)
+
+        # Step 5 simulation steps
+        for _ in range(5):
+            self.app._step_simulation()
+
+        self.assertEqual(self.app.step_count, 5)
 
 
 if __name__ == "__main__":

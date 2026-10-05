@@ -15,7 +15,14 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import warnings
 from pathlib import Path
+
+# Silence deprecation warnings and library banners for a clean console
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("PYTHONWARNINGS", "ignore")
+warnings.filterwarnings("ignore")
 
 REPO_ROOT = Path(__file__).resolve().parent
 AGENT_EVAL_DIR = REPO_ROOT / "overcooked-agent-eval"
@@ -29,9 +36,12 @@ def _restart_in_project_venv() -> None:
         return
 
     if VENV_PYTHON.is_file():
+        os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+        os.environ["PYTHONWARNINGS"] = "ignore"
         os.execv(
             str(VENV_PYTHON),
-            [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]],
+            [str(VENV_PYTHON), "-W", "ignore", str(Path(__file__).resolve()), *sys.argv[1:]],
         )
 
 
