@@ -34,7 +34,22 @@ pip install "protobuf==3.19.6" "grpcio==1.51.3" "streamlit==1.19.0" "altair==4.2
 
 ## 🎮 Play & Render Gameplay
 
-### 1. Interactive Play (Human vs. Greedy Agent)
+### 🌟 Interactive Runner GUI (`runover.py`)
+Launch the all-in-one graphical runner featuring live kitchen previews, dynamic agent dropdowns, real-time play, and direct Streamlit graph integration:
+
+```bash
+python runover.py
+```
+
+- **Chef 0 (Agent 1)**: Always wears the **Red Hat** 🔴 (`Human`, `PPO`, `Greedy`, `Upstream`, `Random`, `Stay`).
+- **Chef 1 (Agent 2)**: Always wears the **Blue Hat** 🔵 (`PPO`, `Greedy`, `Upstream`, `Human`, `Random`, `Stay`).
+- **Live Layout Selection**: Changing the layout in the dropdown immediately updates the preview canvas live.
+- **Pause & Run Controls**: Start, pause, resume, or restart gameplay anytime.
+- **View Graph Integration**: When an episode finishes ("Done!"), click **View Graph** to automatically open the Streamlit dashboard in your web browser.
+
+---
+
+### 1. Interactive Play via CLI (`render.py`)
 Control **Chef 0** with WASD / Arrow keys while **Chef 1** is controlled by the BFS Greedy Search agent:
 
 ```bash
