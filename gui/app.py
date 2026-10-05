@@ -610,16 +610,6 @@ class OvercookedApp:
         title_surf = font_title.render("OVERCOOKED-AI", True, TEXT_PRIMARY)
         self.window.blit(title_surf, (sb_x, 18))
 
-        # Status Banner (Top right of sidebar)
-        if self.state == AppState.DONE:
-            UIBanner.draw(self.window, (sb_x + sb_w - 94, 16, 94, 26), "GAME OVER", COLOR_DONE_BADGE, font_size=11, bold=True)
-        elif self.state == AppState.RUNNING:
-            UIBanner.draw(self.window, (sb_x + sb_w - 84, 16, 84, 26), "RUNNING", COLOR_RUN, font_size=11, bold=True)
-        elif self.state == AppState.PAUSED:
-            UIBanner.draw(self.window, (sb_x + sb_w - 84, 16, 84, 26), "PAUSED", COLOR_PAUSE, font_size=11, bold=True)
-        else:
-            UIBanner.draw(self.window, (sb_x + sb_w - 78, 16, 78, 26), "READY", BG_INPUT, text_color=TEXT_PRIMARY, font_size=11, bold=True)
-
         # Agent 1 Section
         lbl_font = FontManager.get_font(13, bold=True)
         a0_lbl = lbl_font.render("AGENT 1", True, TEXT_PRIMARY)
@@ -640,18 +630,6 @@ class OvercookedApp:
         # Layout Section
         lay_lbl = lbl_font.render("STAGE / LAYOUT", True, TEXT_PRIMARY)
         self.window.blit(lay_lbl, (sb_x, 238))
-        hint_font = FontManager.get_font(10, bold=False)
-        if self.state == AppState.PAUSED:
-            hint_text = "(LOCKED WHILE PAUSED)"
-            hint_color = COLOR_PAUSE
-        elif self.state == AppState.RUNNING:
-            hint_text = "(LOCKED WHILE RUNNING)"
-            hint_color = COLOR_PAUSE
-        else:
-            hint_text = "(LIVE PREVIEW)"
-            hint_color = TEXT_MUTED
-        hint_surf = hint_font.render(hint_text, True, hint_color)
-        self.window.blit(hint_surf, (sb_x + lay_lbl.get_width() + 10, 240))
         self.dropdown_layout.draw(self.window)
 
         # Telemetry & Status Card (RetroUI White Card with chunky border and drop shadow)
