@@ -1,6 +1,7 @@
-"""Reusable retro-styled UI widgets for the Overcooked interactive application.
+"""Reusable UI widgets for the Overcooked interactive application.
 
-Includes retro arcade buttons, dropdown select menus with scrolling, banners, and cards.
+Includes buttons, dropdown select menus with scrolling, banners, badges, and cards,
+implemented with clean modern Pygame graphics.
 """
 
 from __future__ import annotations
@@ -16,24 +17,14 @@ from gui.theme import (
     BORDER_DEFAULT,
     BORDER_FOCUS,
     BORDER_SUBTLE,
-    BORDER_RETRO_LIGHT,
-    BORDER_RETRO_DARK,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_MUTED,
 )
 
 
-def _adjust_color(color: tuple[int, int, int], amount: int) -> tuple[int, int, int]:
-    return (
-        max(0, min(255, color[0] + amount)),
-        max(0, min(255, color[1] + amount)),
-        max(0, min(255, color[2] + amount)),
-    )
-
-
 class UIButton:
-    """A RetroUI pixel-perfect button with chunky border and hard drop-shadow."""
+    """A clean modern push button with hover effects and rounded corners."""
 
     def __init__(
         self,
@@ -45,7 +36,7 @@ class UIButton:
         text_color: tuple[int, int, int] = TEXT_PRIMARY,
         font_size: int = 14,
         bold: bool = True,
-        border_radius: int = 0,
+        border_radius: int = 8,
         border_color: tuple[int, int, int] | None = BORDER_DEFAULT,
     ) -> None:
         self.rect = pygame.Rect(rect)
@@ -85,20 +76,12 @@ class UIButton:
 
         fill_color = self.hover_color if (self.is_hovered and self.is_enabled) else self.bg_color
         if not self.is_enabled:
-            fill_color = (205, 195, 180)
+            fill_color = tuple(max(20, c // 2) for c in self.bg_color)
 
-        # RetroUI Hard Pixel Drop Shadow (3px offset)
-        if self.is_enabled:
-            shadow_rect = self.rect.move(3, 3)
-            pygame.draw.rect(surface, BORDER_DEFAULT, shadow_rect)
-
-        # Button Body
-        pygame.draw.rect(surface, fill_color, self.rect)
-        # Chunky 3px Border in deep espresso #30210b
-        border_col = self.border_color or BORDER_DEFAULT
-        if not self.is_enabled:
-            border_col = BORDER_SUBTLE
-        pygame.draw.rect(surface, border_col, self.rect, width=3)
+        pygame.draw.rect(surface, fill_color, self.rect, border_radius=self.border_radius)
+        if self.border_color and self.is_enabled:
+            border = BORDER_FOCUS if self.is_hovered else self.border_color
+            pygame.draw.rect(surface, border, self.rect, width=1, border_radius=self.border_radius)
 
         font = FontManager.get_font(self.font_size, bold=self.bold)
         txt_col = self.text_color if self.is_enabled else TEXT_MUTED
@@ -108,70 +91,54 @@ class UIButton:
 
 
 class UIDropdown:
-    """A retro arcade dropdown select menu with support for many items and scrolling."""
+    """A sleek dropdown select menu with support for many items and mousewheel scrolling."""
 
     def __init__(
         self,
         rect: pygame.Rect | tuple[int, int, int, int],
-        options: Sequence[tuple[str, Any] | str],
+        options: Sequence[tuple[str, Any]],
         selected_value: Any = None,
-        label: str = "",
         on_change: Callable[[Any], None] | None = None,
-        max_visible_items: int = 7,
         font_size: int = 13,
+        max_visible_items: int = 6,
     ) -> None:
         self.rect = pygame.Rect(rect)
-        self.label = label
+        self.options = list(options)
+        self.selected_value = selected_value
         self.on_change = on_change
-        self.max_visible_items = max_visible_items
         self.font_size = font_size
+        self.max_visible_items = max_visible_items
+
         self.is_open = False
-        self.scroll_offset = 0
-        self.hovered_index = -1
         self.is_hovered = False
+        self.hovered_index = -1
+        self.scroll_offset = 0
         self.is_enabled = True
 
-        self.options: list[tuple[str, Any]] = []
-        for opt in options:
-            if isinstance(opt, tuple):
-                self.options.append(opt)
-            else:
-                self.options.append((str(opt), opt))
-
-        if selected_value is not None:
-            self.selected_value = selected_value
-        elif self.options:
+        if self.selected_value is None and self.options:
             self.selected_value = self.options[0][1]
-        else:
-            self.selected_value = None
-
-    def set_options(self, options: Sequence[tuple[str, Any] | str], preserve_selection: bool = True) -> None:
-        current_val = self.selected_value
-        self.options = [opt if isinstance(opt, tuple) else (str(opt), opt) for opt in options]
-        if preserve_selection and any(v == current_val for _, v in self.options):
-            self.selected_value = current_val
-        elif self.options:
-            self.selected_value = self.options[0][1]
-        else:
-            self.selected_value = None
-        self.scroll_offset = 0
 
     @property
     def selected_label(self) -> str:
         for lbl, val in self.options:
             if val == self.selected_value:
                 return lbl
-        return str(self.selected_value) if self.selected_value is not None else "Select..."
+        return str(self.selected_value)
+
+    def set_options(self, options: Sequence[tuple[str, Any]], new_selected: Any = None) -> None:
+        self.options = list(options)
+        if new_selected is not None:
+            self.selected_value = new_selected
+        elif self.options:
+            match = next((v for l, v in self.options if v == self.selected_value), None)
+            if match is None:
+                self.selected_value = self.options[0][1]
+        self.scroll_offset = 0
 
     def get_popup_rect(self) -> pygame.Rect:
-        num_visible = min(len(self.options), self.max_visible_items)
-        item_height = self.rect.height
-        return pygame.Rect(
-            self.rect.x,
-            self.rect.bottom + 2,
-            self.rect.width,
-            num_visible * item_height + 4,
-        )
+        item_count = min(len(self.options), self.max_visible_items)
+        total_h = item_count * self.rect.height
+        return pygame.Rect(self.rect.x, self.rect.bottom + 2, self.rect.width, total_h)
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.is_enabled:
@@ -185,14 +152,10 @@ class UIDropdown:
                 popup_rect = self.get_popup_rect()
                 if popup_rect.collidepoint(event.pos):
                     rel_y = event.pos[1] - (popup_rect.y + 2)
-                    item_idx = self.scroll_offset + int(rel_y // self.rect.height)
-                    if 0 <= item_idx < len(self.options):
-                        self.hovered_index = item_idx
-                    else:
-                        self.hovered_index = -1
-                    return True
+                    self.hovered_index = self.scroll_offset + int(rel_y // self.rect.height)
                 else:
                     self.hovered_index = -1
+            return False
 
         elif event.type == pygame.MOUSEWHEEL and self.is_open:
             max_scroll = max(0, len(self.options) - self.max_visible_items)
@@ -203,8 +166,8 @@ class UIDropdown:
             if self.rect.collidepoint(event.pos):
                 self.is_open = not self.is_open
                 if self.is_open:
-                    for i, (_, v) in enumerate(self.options):
-                        if v == self.selected_value:
+                    for i, (_, val) in enumerate(self.options):
+                        if val == self.selected_value:
                             max_scroll = max(0, len(self.options) - self.max_visible_items)
                             self.scroll_offset = max(0, min(max_scroll, i - 2))
                             break
@@ -235,30 +198,24 @@ class UIDropdown:
         return False
 
     def draw(self, surface: pygame.Surface) -> None:
-        """Draw the closed base dropdown slot with RetroUI chunky border and hard drop-shadow."""
+        """Draw the closed/base dropdown control."""
         if not self.is_enabled:
-            bg_col = (205, 195, 180)
+            bg_col = (25, 29, 40)
             border_col = BORDER_SUBTLE
             txt_col = TEXT_MUTED
             arrow_char = "—"
-            arrow_col = TEXT_MUTED
+            arrow_col = (65, 72, 92)
         else:
             bg_col = BG_INPUT_HOVER if (self.is_hovered or self.is_open) else BG_INPUT
-            border_col = BORDER_DEFAULT
+            border_col = BORDER_FOCUS if (self.is_hovered or self.is_open) else BORDER_DEFAULT
             txt_col = TEXT_PRIMARY
             arrow_char = "▲" if self.is_open else "▼"
-            arrow_col = TEXT_PRIMARY
+            arrow_col = TEXT_MUTED if not self.is_open else TEXT_PRIMARY
 
-            # RetroUI hard pixel drop shadow (3px)
-            shadow_rect = self.rect.move(3, 3)
-            pygame.draw.rect(surface, BORDER_DEFAULT, shadow_rect)
+        pygame.draw.rect(surface, bg_col, self.rect, border_radius=6)
+        pygame.draw.rect(surface, border_col, self.rect, width=1, border_radius=6)
 
-        # Base slot with chunky 3px border
-        pygame.draw.rect(surface, bg_col, self.rect)
-        pygame.draw.rect(surface, border_col, self.rect, width=3)
-
-        # Selected text
-        font = FontManager.get_font(self.font_size, bold=True)
+        font = FontManager.get_font(self.font_size, bold=False)
         txt = self.selected_label
         avail_w = self.rect.width - 32
         txt_surf = font.render(txt, True, txt_col)
@@ -267,25 +224,25 @@ class UIDropdown:
                 txt = txt[:-1]
             txt_surf = font.render(txt + "...", True, txt_col)
 
-        surface.blit(txt_surf, (self.rect.x + 8, self.rect.y + (self.rect.height - txt_surf.get_height()) // 2))
+        surface.blit(txt_surf, (self.rect.x + 10, self.rect.y + (self.rect.height - txt_surf.get_height()) // 2))
 
-        # Arrow indicator
-        arrow_font = FontManager.get_font(10, bold=True)
+        arrow_font = FontManager.get_font(10, bold=False)
         arrow_surf = arrow_font.render(arrow_char, True, arrow_col)
-        surface.blit(arrow_surf, (self.rect.right - 18, self.rect.y + (self.rect.height - arrow_surf.get_height()) // 2))
+        surface.blit(arrow_surf, (self.rect.right - 20, self.rect.y + (self.rect.height - arrow_surf.get_height()) // 2))
 
     def draw_overlay(self, surface: pygame.Surface) -> None:
-        """Draw floating popup options menu with RetroUI pixel styling."""
+        """Draw the floating popup menu. Must be called in overlay pass."""
         if not self.is_open:
             return
 
         popup_rect = self.get_popup_rect()
-        # Hard pixel drop shadow (4px)
-        shadow_rect = popup_rect.move(4, 4)
-        pygame.draw.rect(surface, BORDER_DEFAULT, shadow_rect)
-        # Popup white body with chunky 3px border
-        pygame.draw.rect(surface, BG_CARD, popup_rect)
-        pygame.draw.rect(surface, BORDER_DEFAULT, popup_rect, width=3)
+        # Soft drop shadow effect
+        shadow_rect = popup_rect.move(2, 4)
+        pygame.draw.rect(surface, (10, 12, 16), shadow_rect, border_radius=6)
+
+        # Popup background & border
+        pygame.draw.rect(surface, BG_CARD, popup_rect, border_radius=6)
+        pygame.draw.rect(surface, BORDER_FOCUS, popup_rect, width=1, border_radius=6)
 
         item_height = self.rect.height
         visible_count = min(len(self.options), self.max_visible_items)
@@ -298,9 +255,9 @@ class UIDropdown:
 
             opt_lbl, opt_val = self.options[opt_idx]
             item_rect = pygame.Rect(
-                popup_rect.x + 3,
-                popup_rect.y + 3 + i * item_height,
-                popup_rect.width - 6,
+                popup_rect.x + 2,
+                popup_rect.y + 2 + i * item_height,
+                popup_rect.width - 4,
                 item_height,
             )
 
@@ -308,13 +265,11 @@ class UIDropdown:
             is_item_hovered = (opt_idx == self.hovered_index)
 
             if is_selected:
-                # Active selection: RetroUI cocoa brown #62471f
-                pygame.draw.rect(surface, BORDER_FOCUS, item_rect)
+                pygame.draw.rect(surface, BG_INPUT_ACTIVE, item_rect, border_radius=4)
             elif is_item_hovered:
-                # Hover: RetroUI warm tan #ddceb4
-                pygame.draw.rect(surface, BG_INPUT, item_rect)
+                pygame.draw.rect(surface, BG_INPUT_HOVER, item_rect, border_radius=4)
 
-            txt_color = (254, 252, 208) if is_selected else TEXT_PRIMARY
+            txt_color = TEXT_PRIMARY if (is_selected or is_item_hovered) else TEXT_SECONDARY
             txt_s = opt_lbl
             txt_rend = font.render(txt_s, True, txt_color)
             if txt_rend.get_width() > item_rect.width - 16:
@@ -324,19 +279,19 @@ class UIDropdown:
 
             surface.blit(txt_rend, (item_rect.x + 8, item_rect.y + (item_rect.height - txt_rend.get_height()) // 2))
 
-        # RetroUI Scrollbar
+        # Scrollbar if more items exist
         if len(self.options) > self.max_visible_items:
             bar_track_h = popup_rect.height - 8
             thumb_h = max(16, int(bar_track_h * (self.max_visible_items / len(self.options))))
             max_scroll = len(self.options) - self.max_visible_items
             scroll_pct = self.scroll_offset / max_scroll if max_scroll > 0 else 0
             thumb_y = popup_rect.y + 4 + int(scroll_pct * (bar_track_h - thumb_h))
-            thumb_rect = pygame.Rect(popup_rect.right - 8, thumb_y, 5, thumb_h)
-            pygame.draw.rect(surface, BORDER_DEFAULT, thumb_rect)
+            thumb_rect = pygame.Rect(popup_rect.right - 6, thumb_y, 4, thumb_h)
+            pygame.draw.rect(surface, (100, 110, 130), thumb_rect, border_radius=2)
 
 
 class UICard:
-    """A RetroUI pixel-perfect card container with chunky 3px border and 3px hard drop-shadow."""
+    """A stylized card container with header and background."""
 
     @staticmethod
     def draw(
@@ -344,20 +299,42 @@ class UICard:
         rect: pygame.Rect | tuple[int, int, int, int],
         bg_color: tuple[int, int, int] = BG_CARD,
         border_color: tuple[int, int, int] = BORDER_DEFAULT,
-        border_radius: int = 0,
+        border_radius: int = 8,
     ) -> None:
         r = pygame.Rect(rect)
-        # RetroUI Hard Pixel Drop Shadow (3px offset)
-        shadow_rect = r.move(3, 3)
-        pygame.draw.rect(surface, border_color, shadow_rect)
-        # Card Body
-        pygame.draw.rect(surface, bg_color, r)
-        # Chunky 3px Border in deep espresso #30210b
-        pygame.draw.rect(surface, border_color, r, width=3)
+        pygame.draw.rect(surface, bg_color, r, border_radius=border_radius)
+        pygame.draw.rect(surface, border_color, r, width=1, border_radius=border_radius)
+
+
+class UIBadge:
+    """A small colorful status badge/pill."""
+
+    @staticmethod
+    def draw(
+        surface: pygame.Surface,
+        center_x: int,
+        center_y: int,
+        text: str,
+        bg_color: tuple[int, int, int],
+        text_color: tuple[int, int, int] = TEXT_PRIMARY,
+        font_size: int = 12,
+        bold: bool = True,
+        padding_x: int = 10,
+        padding_y: int = 4,
+    ) -> pygame.Rect:
+        font = FontManager.get_font(font_size, bold=bold)
+        txt_surf = font.render(text, True, text_color)
+        w = txt_surf.get_width() + padding_x * 2
+        h = txt_surf.get_height() + padding_y * 2
+        rect = pygame.Rect(0, 0, w, h)
+        rect.center = (center_x, center_y)
+        pygame.draw.rect(surface, bg_color, rect, border_radius=h // 2)
+        surface.blit(txt_surf, txt_surf.get_rect(center=rect.center))
+        return rect
 
 
 class UIBanner:
-    """A RetroUI pixel tag/badge with solid color, 2px border, and hard pixel drop-shadow."""
+    """A clean rectangular banner/tag styled with solid color and bold text, matching buttons."""
 
     @staticmethod
     def draw(
@@ -368,17 +345,10 @@ class UIBanner:
         text_color: tuple[int, int, int] = (255, 255, 255),
         font_size: int = 11,
         bold: bool = True,
-        border_radius: int = 0,
+        border_radius: int = 6,
     ) -> pygame.Rect:
         r = pygame.Rect(rect)
-        # Hard pixel drop shadow (2px offset)
-        shadow_rect = r.move(2, 2)
-        pygame.draw.rect(surface, BORDER_DEFAULT, shadow_rect)
-        # Tag Body
-        pygame.draw.rect(surface, bg_color, r)
-        # 2px border in #30210b
-        pygame.draw.rect(surface, BORDER_DEFAULT, r, width=2)
-
+        pygame.draw.rect(surface, bg_color, r, border_radius=border_radius)
         font = FontManager.get_font(font_size, bold=bold)
         txt_surf = font.render(text, True, text_color)
         txt_rect = txt_surf.get_rect(center=r.center)

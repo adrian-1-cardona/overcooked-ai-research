@@ -139,8 +139,8 @@ class TestOvercookedGUI(unittest.TestCase):
         # Both RESET and RUN AGAIN buttons are visible, and dropdowns are unlocked
         self.assertTrue(self.app.btn_reset.is_visible)
         self.assertTrue(self.app.btn_run.is_visible)
-        self.assertEqual(self.app.btn_reset.text, "RESET")
-        self.assertEqual(self.app.btn_run.text, "RUN AGAIN")
+        self.assertEqual(self.app.btn_reset.text, "Reset")
+        self.assertEqual(self.app.btn_run.text, "Run Again")
 
         # Click the RESET button
         self.app.btn_reset.on_click()

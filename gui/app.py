@@ -33,7 +33,6 @@ from gui.theme import (
     BG_WINDOW,
     BG_GAME_FRAME,
     BG_SIDEBAR,
-    BG_GRID,
     BG_CARD,
     BG_INPUT,
     BORDER_DEFAULT,
@@ -43,9 +42,6 @@ from gui.theme import (
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_MUTED,
-    TEXT_CREAM,
-    TEXT_GOLD,
-    COLOR_ACCENT_BROWN,
     COLOR_AGENT_RED,
     COLOR_AGENT_BLUE,
     COLOR_RUN,
@@ -237,7 +233,7 @@ class OvercookedApp:
 
         self.btn_pause = UIButton(
             rect=(sb_x, btn_y, half_w, 44),
-            text="PAUSE",
+            text="Pause",
             on_click=self.toggle_pause,
             bg_color=COLOR_PAUSE,
             hover_color=COLOR_PAUSE_HOVER,
@@ -247,7 +243,7 @@ class OvercookedApp:
 
         self.btn_reset = UIButton(
             rect=(sb_x, btn_y, half_w, 44),
-            text="RESET",
+            text="Reset",
             on_click=self.reset_to_setup,
             bg_color=COLOR_RESET,
             hover_color=COLOR_RESET_HOVER,
@@ -257,7 +253,7 @@ class OvercookedApp:
 
         self.btn_run = UIButton(
             rect=(sb_x, btn_y, sb_w, 44),
-            text="RUN",
+            text="Run",
             on_click=self.handle_run_or_restart_click,
             bg_color=COLOR_RUN,
             hover_color=COLOR_RUN_HOVER,
@@ -268,7 +264,7 @@ class OvercookedApp:
         # View Graph button (ONLY appears and functions when DONE)
         self.btn_view_graph = UIButton(
             rect=(sb_x, btn_y - 54, sb_w, 44),
-            text="VIEW GRAPH (STREAMLIT)",
+            text="View Graph (Streamlit)",
             on_click=self.open_streamlit_dashboard,
             bg_color=COLOR_GRAPH,
             hover_color=COLOR_GRAPH_HOVER,
@@ -582,11 +578,11 @@ class OvercookedApp:
             DIVIDER_COLOR,
             (self.game_pane_width, 0),
             (self.game_pane_width, self.window_height),
-            width=2,
+            width=1,
         )
 
         # ----------------------------------------------------
-        # 2. Right Control Sidebar (RetroUI "Muddy" Brown Theme)
+        # 2. Right Control Sidebar (Modern Dark Theme)
         # ----------------------------------------------------
         sb_start_x = self.game_pane_width
         sb_x = self.game_pane_width + 16
@@ -597,100 +593,94 @@ class OvercookedApp:
             self.window, BG_SIDEBAR, (sb_start_x, 0, SIDEBAR_WIDTH, self.window_height)
         )
 
-        # RetroUI 24px subtle graph grid
-        for gx in range(sb_start_x, self.window_width + 1, 24):
-            pygame.draw.line(self.window, BG_GRID, (gx, 0), (gx, self.window_height), 1)
-        for gy in range(0, self.window_height + 1, 24):
-            pygame.draw.line(self.window, BG_GRID, (sb_start_x, gy), (self.window_width, gy), 1)
-
-        # Chunky 3px solid divider separating game canvas and sidebar
+        # Clean vertical divider separating game canvas and sidebar
         pygame.draw.line(
             self.window,
             DIVIDER_COLOR,
             (sb_start_x, 0),
             (sb_start_x, self.window_height),
-            width=3,
+            width=1,
         )
 
         # Header Title
         font_title = FontManager.get_font(18, bold=True)
         title_surf = font_title.render("OVERCOOKED-AI", True, TEXT_PRIMARY)
         self.window.blit(title_surf, (sb_x, 18))
+        sub_font = FontManager.get_font(11, bold=False)
+        sub_surf = sub_font.render("Interactive Runner", True, TEXT_MUTED)
+        self.window.blit(sub_surf, (sb_x + title_surf.get_width() + 10, 24))
 
         # Agent 1 Section
-        lbl_font = FontManager.get_font(13, bold=True)
-        a0_lbl = lbl_font.render("AGENT 1", True, TEXT_PRIMARY)
+        lbl_font = FontManager.get_font(12, bold=True)
+        a0_lbl = lbl_font.render("Agent 1", True, TEXT_SECONDARY)
         self.window.blit(a0_lbl, (sb_x, 68))
-        # Solid Red Hat banner styled right next to the letter
+        # Solid Red Hat banner styled right next to the label
         a0_badge_x = sb_x + a0_lbl.get_width() + 10
         UIBanner.draw(self.window, (a0_badge_x, 65, 78, 22), "RED HAT", COLOR_AGENT_RED, font_size=10, bold=True)
         self.dropdown_agent_0.draw(self.window)
 
         # Agent 2 Section
-        a1_lbl = lbl_font.render("AGENT 2", True, TEXT_PRIMARY)
+        a1_lbl = lbl_font.render("Agent 2", True, TEXT_SECONDARY)
         self.window.blit(a1_lbl, (sb_x, 153))
-        # Solid Blue Hat banner styled right next to the letter
+        # Solid Blue Hat banner styled right next to the label
         a1_badge_x = sb_x + a1_lbl.get_width() + 10
         UIBanner.draw(self.window, (a1_badge_x, 150, 78, 22), "BLUE HAT", COLOR_AGENT_BLUE, font_size=10, bold=True)
         self.dropdown_agent_1.draw(self.window)
 
         # Layout Section
-        lay_lbl = lbl_font.render("STAGE / LAYOUT", True, TEXT_PRIMARY)
+        lay_lbl = lbl_font.render("Layout / Map", True, TEXT_SECONDARY)
         self.window.blit(lay_lbl, (sb_x, 238))
         self.dropdown_layout.draw(self.window)
 
-        # Telemetry & Status Card (RetroUI White Card with chunky border and drop shadow)
+        # Telemetry & Status Card
         card_y = 315
         card_h = 135
-        UICard.draw(self.window, (sb_x, card_y, sb_w, card_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT)
+        UICard.draw(self.window, (sb_x, card_y, sb_w, card_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT, border_radius=8)
 
         card_title_font = FontManager.get_font(11, bold=True)
-        card_t = card_title_font.render("TELEMETRY & STATS", True, TEXT_MUTED)
+        card_t = card_title_font.render("RUN TELEMETRY & STATS", True, TEXT_MUTED)
         self.window.blit(card_t, (sb_x + 12, card_y + 10))
 
         metric_font = FontManager.get_font(13, bold=False)
-        m_step = metric_font.render(f"STEP: {self.step_count} / {self.horizon}", True, TEXT_PRIMARY)
-        m_score = metric_font.render(f"SCORE: {int(self.cumulative_score):04d}", True, TEXT_GOLD)
-        m_speed = metric_font.render(f"SPEED: {self.fps} FPS", True, TEXT_SECONDARY)
+        m_step = metric_font.render(f"Step: {self.step_count} / {self.horizon}", True, TEXT_PRIMARY)
+        m_score = metric_font.render(f"Score: {int(self.cumulative_score)}", True, (52, 211, 153))
+        m_speed = metric_font.render(f"Speed: {self.fps} FPS", True, TEXT_SECONDARY)
         self.window.blit(m_step, (sb_x + 12, card_y + 34))
         self.window.blit(m_score, (sb_x + 12, card_y + 58))
         self.window.blit(m_speed, (sb_x + 12, card_y + 82))
 
-        # RetroUI Progress bar container: white background, 2px border, 2px shadow
+        # Progress bar
         prog_pct = min(1.0, self.step_count / self.horizon) if self.horizon > 0 else 0
-        pbar_rect = pygame.Rect(sb_x + 12, card_y + 108, sb_w - 24, 12)
-        shadow_pbar = pbar_rect.move(2, 2)
-        pygame.draw.rect(self.window, BORDER_DEFAULT, shadow_pbar)
-        pygame.draw.rect(self.window, (255, 255, 255), pbar_rect)
+        pbar_rect = pygame.Rect(sb_x + 12, card_y + 110, sb_w - 24, 8)
+        pygame.draw.rect(self.window, (20, 24, 34), pbar_rect, border_radius=4)
         if prog_pct > 0:
-            fill_rect = pygame.Rect(sb_x + 14, card_y + 110, int((sb_w - 28) * prog_pct), 8)
-            p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else COLOR_ACCENT_BROWN
-            pygame.draw.rect(self.window, p_color, fill_rect)
-        pygame.draw.rect(self.window, BORDER_DEFAULT, pbar_rect, width=2)
+            fill_rect = pygame.Rect(sb_x + 12, card_y + 110, int((sb_w - 24) * prog_pct), 8)
+            p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else (99, 102, 241)
+            pygame.draw.rect(self.window, p_color, fill_rect, border_radius=4)
 
-        # Controls & Help Card (RetroUI Card)
+        # Controls & Help Card
         help_y = card_y + card_h + 14
         help_h = 105
-        UICard.draw(self.window, (sb_x, help_y, sb_w, help_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT)
+        UICard.draw(self.window, (sb_x, help_y, sb_w, help_h), bg_color=(24, 28, 40), border_color=BORDER_SUBTLE, border_radius=8)
         help_t = card_title_font.render("KEYBOARD CONTROLS", True, TEXT_MUTED)
         self.window.blit(help_t, (sb_x + 12, help_y + 8))
 
-        h_f = FontManager.get_font(10, bold=False)
-        h1 = h_f.render("• WASD / ARROWS : MOVE 1P (RED)", True, TEXT_SECONDARY)
-        h2 = h_f.render("• SPACE / ENTER / F : INTERACT / COOK", True, TEXT_SECONDARY)
-        h3 = h_f.render("• [P] : PAUSE / RESUME   • [R] : RESET", True, TEXT_MUTED)
+        h_f = FontManager.get_font(11, bold=False)
+        h1 = h_f.render("• WASD / Arrows : Move Chef 0 (Red)", True, TEXT_SECONDARY)
+        h2 = h_f.render("• Space / Enter / F : Pick up / Drop / Cook", True, TEXT_SECONDARY)
+        h3 = h_f.render("• [P] : Pause / Resume   • [R] : Reset", True, TEXT_MUTED)
         self.window.blit(h1, (sb_x + 12, help_y + 30))
         self.window.blit(h2, (sb_x + 12, help_y + 50))
         self.window.blit(h3, (sb_x + 12, help_y + 72))
 
         # Warning / Info Message if any
         if self.warning_message:
-            warn_font = FontManager.get_font(10, bold=False)
+            warn_font = FontManager.get_font(11, bold=False)
             warn_surf = warn_font.render(self.warning_message, True, COLOR_PAUSE)
             self.window.blit(warn_surf, (sb_x, help_y + help_h + 8))
 
         # ----------------------------------------------------
-        # Dynamic Action Buttons Layout (RetroUI Drop-Shadow Buttons)
+        # Dynamic Action Buttons Layout
         # ----------------------------------------------------
         btn_y = self.window_height - 64
         half_w = (sb_w - 12) // 2
@@ -698,7 +688,7 @@ class OvercookedApp:
         if self.state == AppState.SETUP:
             # Full width Run button
             self.btn_run.rect = pygame.Rect(sb_x, btn_y, sb_w, 44)
-            self.btn_run.text = "RUN"
+            self.btn_run.text = "Run"
             self.btn_run.bg_color = COLOR_RUN
             self.btn_run.hover_color = COLOR_RUN_HOVER
             self.btn_run.text_color = COLOR_RUN_TEXT
@@ -708,29 +698,30 @@ class OvercookedApp:
         elif self.state in (AppState.RUNNING, AppState.PAUSED):
             # Side by side: Pause/Resume and Reset
             self.btn_pause.rect = pygame.Rect(sb_x, btn_y, half_w, 44)
-            self.btn_pause.text = "RESUME" if self.state == AppState.PAUSED else "PAUSE"
+            self.btn_pause.text = "Resume" if self.state == AppState.PAUSED else "Pause"
             self.btn_pause.is_visible = True
             self.btn_pause.draw(self.window)
 
             self.btn_reset.rect = pygame.Rect(sb_x + half_w + 12, btn_y, half_w, 44)
-            self.btn_reset.text = "RESET"
+            self.btn_reset.text = "Reset"
             self.btn_reset.is_visible = True
             self.btn_reset.draw(self.window)
 
         elif self.state == AppState.DONE:
             # Streamlit View Graph button ONLY appears when DONE!
             self.btn_view_graph.rect = pygame.Rect(sb_x, btn_y - 54, sb_w, 44)
+            self.btn_view_graph.text = "View Graph (Streamlit)"
             self.btn_view_graph.is_visible = True
             self.btn_view_graph.draw(self.window)
 
-            # Two buttons: RESET (to clear and choose different agents/layouts) and RUN AGAIN
+            # Two buttons: Reset (to clear and choose different agents/layouts) and Run Again
             self.btn_reset.rect = pygame.Rect(sb_x, btn_y, half_w, 44)
-            self.btn_reset.text = "RESET"
+            self.btn_reset.text = "Reset"
             self.btn_reset.is_visible = True
             self.btn_reset.draw(self.window)
 
             self.btn_run.rect = pygame.Rect(sb_x + half_w + 12, btn_y, half_w, 44)
-            self.btn_run.text = "RUN AGAIN"
+            self.btn_run.text = "Run Again"
             self.btn_run.bg_color = COLOR_RUN
             self.btn_run.hover_color = COLOR_RUN_HOVER
             self.btn_run.text_color = COLOR_RUN_TEXT
