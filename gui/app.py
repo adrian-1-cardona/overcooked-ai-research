@@ -167,7 +167,7 @@ class OvercookedApp:
         """Load or reload the Overcooked environment and calculate optimal high-res tile size."""
         try:
             self.current_layout = layout_name
-            self.mdp = OvercookedGridworld.from_layout_name(layout_name)
+            self.mdp = OvercookedGridworld.from_layout_name(layout_name, old_dynamics=True)
             self.env = OvercookedEnv.from_mdp(self.mdp, horizon=self.horizon)
             self.step_count = 0
             self.cumulative_score = 0.0
