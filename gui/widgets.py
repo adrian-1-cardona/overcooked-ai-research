@@ -354,3 +354,115 @@ class UIBanner:
         txt_rect = txt_surf.get_rect(center=r.center)
         surface.blit(txt_surf, txt_rect)
         return r
+
+
+class UISwitchbar:
+    """A segmented tab switchbar (e.g. [ Live Match | Matrix Test ])."""
+
+    def __init__(
+        self,
+        rect: pygame.Rect | tuple[int, int, int, int],
+        options: Sequence[tuple[str, str]],
+        selected_value: str,
+        on_change: Callable[[str], None] | None = None,
+        bg_color: tuple[int, int, int] = BG_INPUT,
+        active_color: tuple[int, int, int] = BORDER_FOCUS,
+        border_color: tuple[int, int, int] = BORDER_DEFAULT,
+    ) -> None:
+        self.rect = pygame.Rect(rect)
+        self.options = list(options)
+        self.selected_value = selected_value
+        self.on_change = on_change
+        self.bg_color = bg_color
+        self.active_color = active_color
+        self.border_color = border_color
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                num_opts = max(1, len(self.options))
+                seg_w = self.rect.width / num_opts
+                rel_x = event.pos[0] - self.rect.x
+                idx = min(num_opts - 1, int(rel_x // seg_w))
+                new_val = self.options[idx][1]
+                if new_val != self.selected_value:
+                    self.selected_value = new_val
+                    if self.on_change:
+                        self.on_change(new_val)
+                    return True
+        return False
+
+    def draw(self, surface: pygame.Surface) -> None:
+        pygame.draw.rect(surface, self.bg_color, self.rect, border_radius=6)
+        pygame.draw.rect(surface, self.border_color, self.rect, width=1, border_radius=6)
+
+        num_opts = max(1, len(self.options))
+        seg_w = self.rect.width / num_opts
+
+        for idx, (label, val) in enumerate(self.options):
+            seg_rect = pygame.Rect(
+                int(self.rect.x + idx * seg_w),
+                self.rect.y,
+                int(seg_w),
+                self.rect.height,
+            )
+            is_active = (val == self.selected_value)
+            if is_active:
+                pygame.draw.rect(surface, self.active_color, seg_rect, border_radius=6)
+
+            font = FontManager.get_font(12, bold=is_active)
+            txt_color = TEXT_PRIMARY if is_active else TEXT_SECONDARY
+            txt_surf = font.render(label, True, txt_color)
+            txt_rect = txt_surf.get_rect(center=seg_rect.center)
+            surface.blit(txt_surf, txt_rect)
+
+
+class UICheckbox:
+    """A clean modern toggle checkbox."""
+
+    def __init__(
+        self,
+        rect: pygame.Rect | tuple[int, int, int, int],
+        text: str,
+        checked: bool = True,
+        on_change: Callable[[bool], None] | None = None,
+    ) -> None:
+        self.rect = pygame.Rect(rect)
+        self.text = text
+        self.checked = checked
+        self.on_change = on_change
+        self.is_hovered = False
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        if event.type == pygame.MOUSEMOTION:
+            self.is_hovered = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                self.checked = not self.checked
+                if self.on_change:
+                    self.on_change(self.checked)
+                return True
+        return False
+
+    def draw(self, surface: pygame.Surface) -> None:
+        box_size = 18
+        box_rect = pygame.Rect(self.rect.x, self.rect.y + (self.rect.height - box_size) // 2, box_size, box_size)
+
+        box_bg = BORDER_FOCUS if self.checked else BG_INPUT
+        border_col = BORDER_FOCUS if self.checked else (BORDER_DEFAULT if not self.is_hovered else BORDER_FOCUS)
+
+        pygame.draw.rect(surface, box_bg, box_rect, border_radius=4)
+        pygame.draw.rect(surface, border_col, box_rect, width=1, border_radius=4)
+
+        if self.checked:
+            # Draw checkmark
+            p1 = (box_rect.x + 4, box_rect.y + 9)
+            p2 = (box_rect.x + 8, box_rect.y + 13)
+            p3 = (box_rect.x + 14, box_rect.y + 5)
+            pygame.draw.lines(surface, (255, 255, 255), False, [p1, p2, p3], width=2)
+
+        font = FontManager.get_font(12, bold=self.checked)
+        txt_color = TEXT_PRIMARY if self.checked else TEXT_SECONDARY
+        txt_surf = font.render(self.text, True, txt_color)
+        surface.blit(txt_surf, (box_rect.right + 10, self.rect.y + (self.rect.height - txt_surf.get_height()) // 2))
+
