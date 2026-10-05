@@ -68,6 +68,7 @@ from gui.agent_manager import (
     get_available_layouts,
     is_ppo_supported,
 )
+from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, OvercookedState
@@ -167,8 +168,12 @@ class OvercookedApp:
         """Load or reload the Overcooked environment and calculate optimal high-res tile size."""
         try:
             self.current_layout = layout_name
-            self.mdp = OvercookedGridworld.from_layout_name(layout_name, old_dynamics=True)
-            self.env = OvercookedEnv.from_mdp(self.mdp, horizon=self.horizon)
+            evaluator = AgentEvaluator.from_layout_name(
+                {"layout_name": layout_name, "old_dynamics": True},
+                {"horizon": self.horizon},
+            )
+            self.env = evaluator.env
+            self.mdp = self.env.mdp
             self.step_count = 0
             self.cumulative_score = 0.0
             self.recorded_rows.clear()
