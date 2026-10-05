@@ -163,6 +163,8 @@ class UIDropdown:
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Handle events for this dropdown. Returns True if event was consumed."""
         if not self.is_enabled:
+            self.is_open = False
+            self.is_hovered = False
             return False
 
         if event.type == pygame.MOUSEMOTION:
@@ -227,9 +229,19 @@ class UIDropdown:
 
     def draw(self, surface: pygame.Surface) -> None:
         """Draw the closed/base dropdown control."""
-        # Background
-        bg_col = BG_INPUT_HOVER if (self.is_hovered or self.is_open) else BG_INPUT
-        border_col = BORDER_FOCUS if (self.is_hovered or self.is_open) else BORDER_DEFAULT
+        if not self.is_enabled:
+            bg_col = (25, 29, 40)
+            border_col = BORDER_SUBTLE
+            txt_col = TEXT_MUTED
+            arrow_char = "—"
+            arrow_col = (65, 72, 92)
+        else:
+            bg_col = BG_INPUT_HOVER if (self.is_hovered or self.is_open) else BG_INPUT
+            border_col = BORDER_FOCUS if (self.is_hovered or self.is_open) else BORDER_DEFAULT
+            txt_col = TEXT_PRIMARY
+            arrow_char = "▲" if self.is_open else "▼"
+            arrow_col = TEXT_MUTED if not self.is_open else TEXT_PRIMARY
+
         pygame.draw.rect(surface, bg_col, self.rect, border_radius=6)
         pygame.draw.rect(surface, border_col, self.rect, width=1, border_radius=6)
 
@@ -237,19 +249,18 @@ class UIDropdown:
         font = FontManager.get_font(self.font_size, bold=False)
         txt = self.selected_label
         # Clip text if too long
-        txt_surf = font.render(txt, True, TEXT_PRIMARY)
+        txt_surf = font.render(txt, True, txt_col)
         avail_w = self.rect.width - 32
         if txt_surf.get_width() > avail_w:
             while len(txt) > 3 and font.size(txt + "...")[0] > avail_w:
                 txt = txt[:-1]
-            txt_surf = font.render(txt + "...", True, TEXT_PRIMARY)
+            txt_surf = font.render(txt + "...", True, txt_col)
 
         surface.blit(txt_surf, (self.rect.x + 10, self.rect.y + (self.rect.height - txt_surf.get_height()) // 2))
 
         # Arrow indicator
-        arrow_char = "▲" if self.is_open else "▼"
         arrow_font = FontManager.get_font(10, bold=False)
-        arrow_surf = arrow_font.render(arrow_char, True, TEXT_MUTED if not self.is_open else TEXT_PRIMARY)
+        arrow_surf = arrow_font.render(arrow_char, True, arrow_col)
         surface.blit(arrow_surf, (self.rect.right - 20, self.rect.y + (self.rect.height - arrow_surf.get_height()) // 2))
 
     def draw_overlay(self, surface: pygame.Surface) -> None:
@@ -354,3 +365,27 @@ class UIBadge:
         pygame.draw.rect(surface, bg_color, rect, border_radius=h // 2)
         surface.blit(txt_surf, txt_surf.get_rect(center=rect.center))
         return rect
+
+
+class UIBanner:
+    """A clean rectangular banner/tag styled with solid color and bold text, matching buttons."""
+
+    @staticmethod
+    def draw(
+        surface: pygame.Surface,
+        rect: pygame.Rect | tuple[int, int, int, int],
+        text: str,
+        bg_color: tuple[int, int, int],
+        text_color: tuple[int, int, int] = (255, 255, 255),
+        font_size: int = 12,
+        bold: bool = True,
+        border_radius: int = 6,
+    ) -> pygame.Rect:
+        r = pygame.Rect(rect)
+        pygame.draw.rect(surface, bg_color, r, border_radius=border_radius)
+        font = FontManager.get_font(font_size, bold=bold)
+        txt_surf = font.render(text, True, text_color)
+        txt_rect = txt_surf.get_rect(center=r.center)
+        surface.blit(txt_surf, txt_rect)
+        return r
+

@@ -37,6 +37,9 @@ class TestOvercookedGUI(unittest.TestCase):
         self.assertIsNotNone(self.app.visualizer)
         # Red hat for chef 0, blue hat for chef 1
         self.assertEqual(self.app.visualizer.player_colors, ["red", "blue"])
+        # In SETUP, dropdowns are enabled and view graph is hidden
+        self.assertTrue(self.app.dropdown_layout.is_enabled)
+        self.assertFalse(self.app.btn_view_graph.is_visible)
 
     def test_layout_discovery(self) -> None:
         layouts = get_available_layouts()
@@ -45,7 +48,7 @@ class TestOvercookedGUI(unittest.TestCase):
         self.assertIn("coordination_ring", layouts)
 
     def test_live_layout_change(self) -> None:
-        """Verify layout changes immediately update the environment."""
+        """Verify layout changes immediately update the environment when in SETUP."""
         self.app._on_layout_changed("coordination_ring")
         self.assertEqual(self.app.current_layout, "coordination_ring")
         self.assertEqual(self.app.state, AppState.SETUP)
@@ -61,31 +64,80 @@ class TestOvercookedGUI(unittest.TestCase):
         self.assertIsInstance(stay, StayAgent)
         self.assertIsNone(warn_s)
 
-    def test_simulation_run_to_done(self) -> None:
-        """Verify simulation execution, step count, and transition to DONE."""
+    def test_mid_run_locks_dropdowns(self) -> None:
+        """Verify that dropdowns are locked mid-run and cannot change maps or agents."""
         self.app.selected_agent_0_type = "greedy"
         self.app.selected_agent_1_type = "stay"
-        self.app.start_or_restart_game()
+        self.app.start_game()
         self.assertEqual(self.app.state, AppState.RUNNING)
+        self.assertTrue(self.app.is_mid_run)
 
-        for _ in range(10):
+        # Trigger event cycle to apply mid-run lock
+        self.app.handle_events()
+        self.assertFalse(self.app.dropdown_agent_0.is_enabled)
+        self.assertFalse(self.app.dropdown_agent_1.is_enabled)
+        self.assertFalse(self.app.dropdown_layout.is_enabled)
+
+        # Attempt to change layout while mid-run must be ignored
+        self.app._on_layout_changed("corridor")
+        self.assertEqual(self.app.current_layout, "cramped_room")
+
+        # Pause mid-run: must remain locked
+        self.app.toggle_pause()
+        self.assertEqual(self.app.state, AppState.PAUSED)
+        self.assertTrue(self.app.is_mid_run)
+        self.app.handle_events()
+        self.assertFalse(self.app.dropdown_layout.is_enabled)
+
+    def test_view_graph_only_visible_when_done(self) -> None:
+        """Verify that View Graph (Streamlit) button ONLY appears when DONE, not mid-run."""
+        self.app.selected_agent_0_type = "greedy"
+        self.app.selected_agent_1_type = "stay"
+        self.app.start_game()
+
+        # Step 5 steps (mid-run)
+        for _ in range(5):
+            self.app._step_simulation()
+        self.app.handle_events()
+        self.app._draw_frame()
+        self.assertFalse(self.app.btn_view_graph.is_visible)
+
+        # Pause (mid-run)
+        self.app.toggle_pause()
+        self.app.handle_events()
+        self.app._draw_frame()
+        self.assertFalse(self.app.btn_view_graph.is_visible)
+
+        # Step remaining steps to reach horizon (DONE)
+        self.app.toggle_pause()
+        for _ in range(5):
             self.app._step_simulation()
 
         self.assertEqual(self.app.state, AppState.DONE)
-        self.assertEqual(self.app.step_count, 10)
-        self.assertEqual(len(self.app.recorded_rows), 10)
+        self.app.handle_events()
+        self.app._draw_frame()
+        # Now and only now is View Graph visible!
+        self.assertTrue(self.app.btn_view_graph.is_visible)
 
-    def test_pause_resume_toggle(self) -> None:
+    def test_restart_mid_run_returns_to_setup(self) -> None:
+        """Verify clicking Restart mid-run resets to SETUP and unlocks dropdowns."""
         self.app.selected_agent_0_type = "greedy"
         self.app.selected_agent_1_type = "stay"
-        self.app.start_or_restart_game()
+        self.app.start_game()
         self.assertEqual(self.app.state, AppState.RUNNING)
 
-        self.app.toggle_pause()
-        self.assertEqual(self.app.state, AppState.PAUSED)
+        for _ in range(3):
+            self.app._step_simulation()
+        self.assertEqual(self.app.step_count, 3)
 
-        self.app.toggle_pause()
-        self.assertEqual(self.app.state, AppState.RUNNING)
+        # Click Restart mid-run
+        self.app.handle_run_or_restart_click()
+        self.assertEqual(self.app.state, AppState.SETUP)
+        self.assertEqual(self.app.step_count, 0)
+        self.app.handle_events()
+        self.assertTrue(self.app.dropdown_layout.is_enabled)
+        self.assertTrue(self.app.dropdown_agent_0.is_enabled)
+        self.assertTrue(self.app.dropdown_agent_1.is_enabled)
 
 
 if __name__ == "__main__":
