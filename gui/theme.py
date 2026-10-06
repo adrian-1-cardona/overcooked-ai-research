@@ -62,8 +62,11 @@ COLOR_DONE_BADGE: Color = (16, 185, 129)   # Celebratory green
 COLOR_DONE_BADGE_BG: Color = (20, 60, 40)
 
 
+from pathlib import Path
+
+
 class FontManager:
-    """Manages system fonts across different sizes."""
+    """Manages system fonts across different sizes with crisp TrueType rendering."""
 
     _fonts: dict[tuple[str, int, bool], pygame.font.Font] = {}
 
@@ -72,11 +75,21 @@ class FontManager:
         pygame.font.init()
         key = ("default", size, bold)
         if key not in cls._fonts:
-            try:
-                # Prefer clean system fonts on macOS
-                font_names = ["SF Pro Display", "Helvetica Neue", "Arial", "DejaVu Sans"]
-                font = pygame.font.SysFont(font_names, size, bold=bold)
-            except Exception:
-                font = pygame.font.Font(None, size)
+            font: pygame.font.Font | None = None
+            # Match genuine TrueType font files with native bold weights to avoid blurry fake bolding
+            font_candidates = ["arial", "trebuchetms", "verdana", "dejavusans"]
+            for name in font_candidates:
+                path = pygame.font.match_font(name, bold=bold)
+                if path and Path(path).is_file():
+                    try:
+                        font = pygame.font.Font(path, size)
+                        break
+                    except Exception:
+                        continue
+            if font is None:
+                try:
+                    font = pygame.font.SysFont("arial", size, bold=bold)
+                except Exception:
+                    font = pygame.font.Font(None, size)
             cls._fonts[key] = font
         return cls._fonts[key]
