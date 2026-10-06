@@ -24,6 +24,10 @@ from typing import Any
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("SDL_MAC_ALLOW_HIGHDPI", "1")
+os.environ.setdefault("SDL_VIDEO_ALLOW_HIGHDPI", "1")
+os.environ.setdefault("SDL_HINT_RENDER_SCALE_QUALITY", "0")
+os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "0")
 
 import pygame
 
@@ -35,7 +39,10 @@ from gui.theme import (
     BG_GAME_FRAME,
     BG_SIDEBAR,
     BG_CARD,
+    BG_CARD_ALT,
     BG_INPUT,
+    BORDER_BLACK,
+    SHADOW_BLACK,
     BORDER_DEFAULT,
     BORDER_FOCUS,
     BORDER_SUBTLE,
@@ -371,18 +378,18 @@ class OvercookedApp:
         )
 
         self.btn_k_minus = UIButton(
-            rect=(sb_x + 130, 328, 30, 24),
+            rect=(sb_x + 130, 328, 28, 26),
             text="-",
             on_click=self._dec_k,
             font_size=15,
-            border_radius=4,
+            border_radius=0,
         )
         self.btn_k_plus = UIButton(
-            rect=(sb_x + 195, 328, 30, 24),
+            rect=(sb_x + 195, 328, 28, 26),
             text="+",
             on_click=self._inc_k,
             font_size=15,
-            border_radius=4,
+            border_radius=0,
         )
 
         self.btn_run_matrix = UIButton(
@@ -844,8 +851,9 @@ class OvercookedApp:
                 new_w = max(1, int(orig_w * scale))
                 new_h = max(1, int(orig_h * scale))
 
+                # Nearest-neighbor scaling to keep pixel art completely crisp (avoid smoothscale blur)
                 if (new_w, new_h) != (orig_w, orig_h):
-                    scaled_surface = pygame.transform.smoothscale(game_surface, (new_w, new_h))
+                    scaled_surface = pygame.transform.scale(game_surface, (new_w, new_h))
                 else:
                     scaled_surface = game_surface
 
@@ -855,13 +863,13 @@ class OvercookedApp:
                 self.window.blit(scaled_surface, (offset_x, offset_y))
 
         elif self.active_mode == "matrix":
-            # Matrix Benchmark Dashboard Canvas
+            # Matrix Benchmark Dashboard Canvas in RetroUI Style
             card_w = min(680, self.game_pane_width - 80)
             card_h = min(540, self.window_height - 100)
             card_x = (self.game_pane_width - card_w) // 2
             card_y = (self.window_height - card_h) // 2
 
-            UICard.draw(self.window, (card_x, card_y, card_w, card_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT, border_radius=12)
+            UICard.draw(self.window, (card_x, card_y, card_w, card_h), bg_color=BG_CARD, border_color=BORDER_BLACK, border_radius=0, shadow_offset=4)
 
             # Title
             f_title = FontManager.get_font(20, bold=True)
@@ -883,21 +891,21 @@ class OvercookedApp:
             box_h = 75
 
             # Box 1: Pairings
-            UICard.draw(self.window, (card_x + 30, box_y, box_w, box_h), bg_color=(24, 28, 40), border_color=BORDER_SUBTLE, border_radius=8)
+            UICard.draw(self.window, (card_x + 30, box_y, box_w, box_h), bg_color=BG_CARD_ALT, border_color=BORDER_BLACK, border_radius=0, shadow_offset=2)
             f_box_lbl = FontManager.get_font(11, bold=True)
-            f_box_val = FontManager.get_font(20, bold=True)
-            self.window.blit(f_box_lbl.render("AGENT PAIRINGS", True, TEXT_MUTED), (card_x + 42, box_y + 12))
-            self.window.blit(f_box_val.render(f"{n_agents} x {n_agents} ({n_agents * n_agents})", True, (99, 102, 241)), (card_x + 42, box_y + 34))
+            f_box_val = FontManager.get_mono_font(18, bold=True)
+            self.window.blit(f_box_lbl.render("AGENT PAIRINGS", True, TEXT_MUTED), (card_x + 42, box_y + 14))
+            self.window.blit(f_box_val.render(f"{n_agents} x {n_agents} ({n_agents * n_agents})", True, TEXT_PRIMARY), (card_x + 42, box_y + 38))
 
             # Box 2: Levels
-            UICard.draw(self.window, (card_x + 30 + box_w + 15, box_y, box_w, box_h), bg_color=(24, 28, 40), border_color=BORDER_SUBTLE, border_radius=8)
-            self.window.blit(f_box_lbl.render("ACTIVE LEVELS", True, TEXT_MUTED), (card_x + 30 + box_w + 27, box_y + 12))
-            self.window.blit(f_box_val.render(f"{m_levels} Layouts", True, (59, 130, 246)), (card_x + 30 + box_w + 27, box_y + 34))
+            UICard.draw(self.window, (card_x + 30 + box_w + 15, box_y, box_w, box_h), bg_color=BG_CARD_ALT, border_color=BORDER_BLACK, border_radius=0, shadow_offset=2)
+            self.window.blit(f_box_lbl.render("ACTIVE LEVELS", True, TEXT_MUTED), (card_x + 30 + box_w + 27, box_y + 14))
+            self.window.blit(f_box_val.render(f"{m_levels} Layouts", True, TEXT_PRIMARY), (card_x + 30 + box_w + 27, box_y + 38))
 
             # Box 3: Total Games
-            UICard.draw(self.window, (card_x + 30 + (box_w + 15) * 2, box_y, box_w, box_h), bg_color=(24, 28, 40), border_color=BORDER_SUBTLE, border_radius=8)
-            self.window.blit(f_box_lbl.render("TOTAL GAMES", True, TEXT_MUTED), (card_x + 30 + (box_w + 15) * 2 + 12, box_y + 12))
-            self.window.blit(f_box_val.render(f"{episodes} Plays", True, (52, 211, 153)), (card_x + 30 + (box_w + 15) * 2 + 12, box_y + 34))
+            UICard.draw(self.window, (card_x + 30 + (box_w + 15) * 2, box_y, box_w, box_h), bg_color=BG_CARD_ALT, border_color=BORDER_BLACK, border_radius=0, shadow_offset=2)
+            self.window.blit(f_box_lbl.render("TOTAL GAMES", True, TEXT_MUTED), (card_x + 30 + (box_w + 15) * 2 + 12, box_y + 14))
+            self.window.blit(f_box_val.render(f"{episodes} Plays", True, (45, 135, 80)), (card_x + 30 + (box_w + 15) * 2 + 12, box_y + 38))
 
             # Status section
             status_y = box_y + box_h + 35
@@ -905,25 +913,25 @@ class OvercookedApp:
             self.window.blit(f_sec.render("BENCHMARK STATUS", True, TEXT_MUTED), (card_x + 30, status_y))
 
             f_stat = FontManager.get_font(14, bold=False)
-            stat_color = (52, 211, 153) if self.matrix_done else TEXT_PRIMARY
+            stat_color = (45, 135, 80) if self.matrix_done else TEXT_PRIMARY
             self.window.blit(f_stat.render(self.matrix_status, True, stat_color), (card_x + 30, status_y + 25))
 
             # Progress bar
             p_bar_y = status_y + 60
-            p_bar_rect = pygame.Rect(card_x + 30, p_bar_y, card_w - 60, 10)
-            pygame.draw.rect(self.window, (20, 24, 34), p_bar_rect, border_radius=5)
+            p_bar_rect = pygame.Rect(card_x + 30, p_bar_y, card_w - 60, 16)
+            UICard.draw(self.window, p_bar_rect, bg_color=(245, 245, 245), border_color=BORDER_BLACK, border_radius=0, shadow_offset=2)
             if self.matrix_progress > 0:
-                fill_w = int((card_w - 60) * self.matrix_progress)
-                fill_rect = pygame.Rect(card_x + 30, p_bar_y, fill_w, 10)
-                p_color = COLOR_DONE_BADGE if self.matrix_done else (99, 102, 241)
-                pygame.draw.rect(self.window, p_color, fill_rect, border_radius=5)
+                fill_w = int((p_bar_rect.width - 4) * self.matrix_progress)
+                fill_rect = pygame.Rect(p_bar_rect.x + 2, p_bar_rect.y + 2, fill_w, p_bar_rect.height - 4)
+                p_color = COLOR_DONE_BADGE if self.matrix_done else (100, 105, 115)
+                pygame.draw.rect(self.window, p_color, fill_rect)
 
             # Bottom guidance hint
             hint_y = p_bar_y + 35
             f_hint = FontManager.get_font(12, bold=False)
             if self.matrix_done:
                 hint_txt = "Benchmark complete! Click 'View Graphs' in the right sidebar to open Streamlit heatmaps."
-                hint_surf = f_hint.render(hint_txt, True, (52, 211, 153))
+                hint_surf = f_hint.render(hint_txt, True, (45, 135, 80))
             elif self.matrix_running:
                 hint_txt = "Simulating games headless in memory... Windows stay smooth and responsive."
                 hint_surf = f_hint.render(hint_txt, True, TEXT_SECONDARY)
@@ -935,14 +943,14 @@ class OvercookedApp:
         # Vertical divider line separating game pane and sidebar
         pygame.draw.line(
             self.window,
-            DIVIDER_COLOR,
+            BORDER_BLACK,
             (self.game_pane_width, 0),
             (self.game_pane_width, self.window_height),
-            width=1,
+            width=2,
         )
 
         # ----------------------------------------------------
-        # 2. Right Control Sidebar (Modern Dark Theme)
+        # 2. Right Control Sidebar (RetroUI Style)
         # ----------------------------------------------------
         sb_start_x = self.game_pane_width
         sb_x = self.game_pane_width + 16
@@ -958,7 +966,7 @@ class OvercookedApp:
         title_surf = font_title.render("OVERCOOKED-AI", True, TEXT_PRIMARY)
         self.window.blit(title_surf, (sb_x, 14))
         sub_font = FontManager.get_font(11, bold=False)
-        sub_surf = sub_font.render("Interactive Runner", True, TEXT_MUTED)
+        sub_surf = sub_font.render("Retro Runner", True, TEXT_MUTED)
         self.window.blit(sub_surf, (sb_x + title_surf.get_width() + 10, 20))
 
         # Draw Top Switchbar (Live Match vs Matrix Test)
@@ -973,61 +981,61 @@ class OvercookedApp:
         if self.active_mode == "live":
             # Agent 1 Section
             lbl_font = FontManager.get_font(12, bold=True)
-            a0_lbl = lbl_font.render("Agent 1", True, TEXT_SECONDARY)
+            a0_lbl = lbl_font.render("Agent 1", True, TEXT_PRIMARY)
             self.window.blit(a0_lbl, (sb_x, 88))
             a0_badge_x = sb_x + a0_lbl.get_width() + 10
             UIBanner.draw(self.window, (a0_badge_x, 85, 78, 20), "RED HAT", COLOR_AGENT_RED, font_size=10, bold=True)
             self.dropdown_agent_0.draw(self.window)
 
             # Agent 2 Section
-            a1_lbl = lbl_font.render("Agent 2", True, TEXT_SECONDARY)
+            a1_lbl = lbl_font.render("Agent 2", True, TEXT_PRIMARY)
             self.window.blit(a1_lbl, (sb_x, 166))
             a1_badge_x = sb_x + a1_lbl.get_width() + 10
             UIBanner.draw(self.window, (a1_badge_x, 163, 78, 20), "BLUE HAT", COLOR_AGENT_BLUE, font_size=10, bold=True)
             self.dropdown_agent_1.draw(self.window)
 
             # Layout Section
-            lay_lbl = lbl_font.render("Layout / Map", True, TEXT_SECONDARY)
+            lay_lbl = lbl_font.render("Layout / Map", True, TEXT_PRIMARY)
             self.window.blit(lay_lbl, (sb_x, 244))
             self.dropdown_layout.draw(self.window)
 
             # Telemetry & Status Card
             card_y = 318
             card_h = 125
-            UICard.draw(self.window, (sb_x, card_y, sb_w, card_h), bg_color=BG_CARD, border_color=BORDER_DEFAULT, border_radius=8)
+            UICard.draw(self.window, (sb_x, card_y, sb_w, card_h), bg_color=BG_CARD, border_color=BORDER_BLACK, border_radius=0, shadow_offset=3)
 
             card_title_font = FontManager.get_font(11, bold=True)
             card_t = card_title_font.render("RUN TELEMETRY & STATS", True, TEXT_MUTED)
             self.window.blit(card_t, (sb_x + 12, card_y + 10))
 
-            metric_font = FontManager.get_font(13, bold=False)
-            m_step = metric_font.render(f"Step: {self.step_count} / {self.horizon}", True, TEXT_PRIMARY)
-            m_score = metric_font.render(f"Score: {int(self.cumulative_score)}", True, (52, 211, 153))
-            m_speed = metric_font.render(f"Speed: {self.fps} FPS", True, TEXT_SECONDARY)
+            metric_font = FontManager.get_mono_font(12, bold=False)
+            m_step = metric_font.render(f"Step  : {self.step_count} / {self.horizon}", True, TEXT_PRIMARY)
+            m_score = metric_font.render(f"Score : {int(self.cumulative_score)}", True, (45, 135, 80))
+            m_speed = metric_font.render(f"Speed : {self.fps} FPS", True, TEXT_SECONDARY)
             self.window.blit(m_step, (sb_x + 12, card_y + 32))
             self.window.blit(m_score, (sb_x + 12, card_y + 54))
             self.window.blit(m_speed, (sb_x + 12, card_y + 76))
 
             # Progress bar
             prog_pct = min(1.0, self.step_count / self.horizon) if self.horizon > 0 else 0
-            pbar_rect = pygame.Rect(sb_x + 12, card_y + 102, sb_w - 24, 8)
-            pygame.draw.rect(self.window, (20, 24, 34), pbar_rect, border_radius=4)
+            pbar_rect = pygame.Rect(sb_x + 12, card_y + 102, sb_w - 24, 10)
+            UICard.draw(self.window, pbar_rect, bg_color=(245, 245, 245), border_color=BORDER_BLACK, border_radius=0, shadow_offset=1)
             if prog_pct > 0:
-                fill_rect = pygame.Rect(sb_x + 12, card_y + 102, int((sb_w - 24) * prog_pct), 8)
-                p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else (99, 102, 241)
-                pygame.draw.rect(self.window, p_color, fill_rect, border_radius=4)
+                fill_rect = pygame.Rect(sb_x + 13, card_y + 103, int((sb_w - 26) * prog_pct), 8)
+                p_color = COLOR_DONE_BADGE if self.state == AppState.DONE else (100, 105, 115)
+                pygame.draw.rect(self.window, p_color, fill_rect)
 
             # Controls & Help Card
             help_y = card_y + card_h + 12
             help_h = 95
-            UICard.draw(self.window, (sb_x, help_y, sb_w, help_h), bg_color=(24, 28, 40), border_color=BORDER_SUBTLE, border_radius=8)
+            UICard.draw(self.window, (sb_x, help_y, sb_w, help_h), bg_color=BG_CARD_ALT, border_color=BORDER_BLACK, border_radius=0, shadow_offset=2)
             help_t = card_title_font.render("KEYBOARD CONTROLS", True, TEXT_MUTED)
             self.window.blit(help_t, (sb_x + 12, help_y + 8))
 
             h_f = FontManager.get_font(11, bold=False)
-            h1 = h_f.render("• WASD / Arrows : Move Chef 0 (Red)", True, TEXT_SECONDARY)
-            h2 = h_f.render("• Space / Enter / F : Pick up / Drop / Cook", True, TEXT_SECONDARY)
-            h3 = h_f.render("• [P] : Pause / Resume   • [R] : Reset", True, TEXT_MUTED)
+            h1 = h_f.render("- WASD / Arrows : Move Chef 0 (Red)", True, TEXT_SECONDARY)
+            h2 = h_f.render("- Space / Enter : Pick up / Drop / Cook", True, TEXT_SECONDARY)
+            h3 = h_f.render("- [P] Pause / Resume   - [R] Reset", True, TEXT_MUTED)
             self.window.blit(h1, (sb_x + 12, help_y + 28))
             self.window.blit(h2, (sb_x + 12, help_y + 48))
             self.window.blit(h3, (sb_x + 12, help_y + 68))
@@ -1081,13 +1089,13 @@ class OvercookedApp:
             f_sec = FontManager.get_font(12, bold=True)
 
             # Agents Section
-            self.window.blit(f_sec.render("AGENTS TO BENCHMARK", True, TEXT_MUTED), (sb_x, 88))
+            self.window.blit(f_sec.render("AGENTS TO BENCHMARK", True, TEXT_PRIMARY), (sb_x, 88))
             self.cb_ppo.draw(self.window)
             self.cb_greedy.draw(self.window)
             self.cb_random.draw(self.window)
 
             # Levels Section
-            self.window.blit(f_sec.render("LEVELS TO INCLUDE", True, TEXT_MUTED), (sb_x, 188))
+            self.window.blit(f_sec.render("LEVELS TO INCLUDE", True, TEXT_PRIMARY), (sb_x, 188))
             self.cb_cramped.draw(self.window)
             self.cb_asym.draw(self.window)
             self.cb_ring.draw(self.window)
@@ -1095,19 +1103,19 @@ class OvercookedApp:
             self.cb_circuit.draw(self.window)
 
             # K Stepper Section
-            self.window.blit(f_sec.render("TRIALS PER PAIR (K)", True, TEXT_MUTED), (sb_x, 326))
+            self.window.blit(f_sec.render("TRIALS PER PAIR (K)", True, TEXT_PRIMARY), (sb_x, 328))
             self.btn_k_minus.draw(self.window)
-            f_k = FontManager.get_font(14, bold=True)
+            f_k = FontManager.get_mono_font(15, bold=True)
             k_surf = f_k.render(str(self.matrix_k), True, TEXT_PRIMARY)
-            self.window.blit(k_surf, (sb_x + 170, 330))
+            self.window.blit(k_surf, (sb_x + 172, 332))
             self.btn_k_plus.draw(self.window)
 
             # Matrix Benchmark Buttons
             if self.matrix_running:
                 # Disabled running button
                 self.btn_run_matrix.text = "Simulating..."
-                self.btn_run_matrix.bg_color = (60, 70, 95)
-                self.btn_run_matrix.hover_color = (60, 70, 95)
+                self.btn_run_matrix.bg_color = (210, 214, 220)
+                self.btn_run_matrix.hover_color = (210, 214, 220)
                 self.btn_run_matrix.rect = pygame.Rect(sb_x, btn_y, sb_w, 44)
                 self.btn_run_matrix.draw(self.window)
 

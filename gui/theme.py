@@ -14,52 +14,55 @@ WINDOW_DEFAULT_HEIGHT = 760
 SIDEBAR_WIDTH = 340
 HEADER_HEIGHT = 50
 
-# Modern Dark Theme Palette
-BG_WINDOW: Color = (22, 25, 34)            # Deep dark charcoal
-BG_GAME_FRAME: Color = (15, 17, 23)        # Slightly darker canvas backing
-BG_SIDEBAR: Color = (28, 32, 45)           # Elegant sidebar panel
-BG_CARD: Color = (36, 41, 56)              # Card background
-BG_CARD_HOVER: Color = (46, 52, 70)        # Card hover state
-BG_INPUT: Color = (30, 34, 48)             # Dropdown / input background
-BG_INPUT_HOVER: Color = (42, 48, 66)       # Dropdown hover
-BG_INPUT_ACTIVE: Color = (52, 60, 82)      # Active / pressed input
+# RetroUI Gray Palette (Inspired by retroui.io/components with neutral gray & neo-brutalist styling)
+BG_WINDOW: Color = (232, 227, 231)            # RetroUI canvas stone gray (#e8e3e7)
+BG_GAME_FRAME: Color = (24, 25, 28)           # Inset dark canvas backing for kitchen
+BG_SIDEBAR: Color = (220, 218, 222)           # Retro sidebar panel gray
+BG_CARD: Color = (255, 255, 255)              # Crisp white retro card
+BG_CARD_ALT: Color = (245, 245, 248)          # Light pewter secondary card
+BG_CARD_HOVER: Color = (240, 242, 246)        # Card hover state
+BG_INPUT: Color = (255, 255, 255)             # Retro input surface
+BG_INPUT_HOVER: Color = (236, 238, 242)       # Input hover
+BG_INPUT_ACTIVE: Color = (210, 214, 220)      # Active / pressed input
 
-# Borders and Dividers
-BORDER_DEFAULT: Color = (50, 58, 80)
-BORDER_FOCUS: Color = (99, 102, 241)       # Indigo highlight
-BORDER_SUBTLE: Color = (38, 44, 62)
-DIVIDER_COLOR: Color = (45, 52, 72)
+# Retro Solid Borders and Hard Shadows
+BORDER_BLACK: Color = (0, 0, 0)
+SHADOW_BLACK: Color = (0, 0, 0)
+BORDER_DEFAULT: Color = (0, 0, 0)
+BORDER_FOCUS: Color = (0, 0, 0)
+BORDER_SUBTLE: Color = (0, 0, 0)
+DIVIDER_COLOR: Color = (0, 0, 0)
 
-# Typography Colors
-TEXT_PRIMARY: Color = (243, 244, 246)      # Pure crisp off-white
-TEXT_SECONDARY: Color = (156, 163, 175)    # Muted silver
-TEXT_MUTED: Color = (107, 114, 128)        # Darker gray
-TEXT_DARK: Color = (17, 24, 39)            # Dark for light badges
+# Typography Colors (Maximum contrast to prevent fuzziness on Retina screens)
+TEXT_PRIMARY: Color = (0, 0, 0)               # Pure crisp solid black
+TEXT_SECONDARY: Color = (65, 70, 80)          # Slate gray
+TEXT_MUTED: Color = (110, 115, 125)           # Muted gray
+TEXT_DARK: Color = (0, 0, 0)
 
-# Accents
-COLOR_AGENT_RED: Color = (239, 68, 68)     # Agent 1 Red Hat
-COLOR_AGENT_RED_BG: Color = (80, 20, 25)
-COLOR_AGENT_BLUE: Color = (59, 130, 246)   # Agent 2 Blue Hat
-COLOR_AGENT_BLUE_BG: Color = (20, 45, 85)
+# Accents (Muted retro tones with solid black borders)
+COLOR_AGENT_RED: Color = (215, 55, 55)        # Agent 1 Red Hat
+COLOR_AGENT_RED_BG: Color = (255, 232, 232)
+COLOR_AGENT_BLUE: Color = (45, 100, 205)      # Agent 2 Blue Hat
+COLOR_AGENT_BLUE_BG: Color = (230, 240, 255)
 
-COLOR_RUN: Color = (16, 185, 129)          # Emerald green
-COLOR_RUN_HOVER: Color = (5, 150, 105)
-COLOR_RUN_TEXT: Color = (255, 255, 255)
+COLOR_RUN: Color = (210, 214, 220)            # Retro gray button
+COLOR_RUN_HOVER: Color = (195, 200, 208)
+COLOR_RUN_TEXT: Color = (0, 0, 0)
 
-COLOR_PAUSE: Color = (245, 158, 11)        # Warm amber
-COLOR_PAUSE_HOVER: Color = (217, 119, 6)
-COLOR_PAUSE_TEXT: Color = (255, 255, 255)
+COLOR_PAUSE: Color = (225, 185, 110)          # Retro warm amber
+COLOR_PAUSE_HOVER: Color = (210, 170, 95)
+COLOR_PAUSE_TEXT: Color = (0, 0, 0)
 
-COLOR_RESET: Color = (75, 85, 99)          # Slate gray
-COLOR_RESET_HOVER: Color = (107, 114, 128)
-COLOR_RESET_TEXT: Color = (255, 255, 255)
+COLOR_RESET: Color = (210, 214, 220)          # Retro gray
+COLOR_RESET_HOVER: Color = (195, 200, 208)
+COLOR_RESET_TEXT: Color = (0, 0, 0)
 
-COLOR_GRAPH: Color = (139, 92, 246)        # Purple / Violet (Streamlit vibe)
-COLOR_GRAPH_HOVER: Color = (124, 58, 237)
-COLOR_GRAPH_TEXT: Color = (255, 255, 255)
+COLOR_GRAPH: Color = (195, 200, 210)          # Retro slate gray
+COLOR_GRAPH_HOVER: Color = (180, 185, 195)
+COLOR_GRAPH_TEXT: Color = (0, 0, 0)
 
-COLOR_DONE_BADGE: Color = (16, 185, 129)   # Celebratory green
-COLOR_DONE_BADGE_BG: Color = (20, 60, 40)
+COLOR_DONE_BADGE: Color = (45, 135, 80)       # Retro muted green
+COLOR_DONE_BADGE_BG: Color = (230, 245, 235)
 
 
 from pathlib import Path
@@ -76,8 +79,8 @@ class FontManager:
         key = ("default", size, bold)
         if key not in cls._fonts:
             font: pygame.font.Font | None = None
-            # Match genuine TrueType font files with native bold weights to avoid blurry fake bolding
-            font_candidates = ["arial", "trebuchetms", "verdana", "dejavusans"]
+            # Match genuine TrueType font files: Geneva provides classic retro Mac OS crispness
+            font_candidates = ["geneva", "arial", "helvetica", "dejavusans"]
             for name in font_candidates:
                 path = pygame.font.match_font(name, bold=bold)
                 if path and Path(path).is_file():
@@ -88,8 +91,32 @@ class FontManager:
                         continue
             if font is None:
                 try:
-                    font = pygame.font.SysFont("arial", size, bold=bold)
+                    font = pygame.font.SysFont("geneva", size, bold=bold)
                 except Exception:
                     font = pygame.font.Font(None, size)
+            cls._fonts[key] = font
+        return cls._fonts[key]
+
+    @classmethod
+    def get_mono_font(cls, size: int = 13, bold: bool = False) -> pygame.font.Font:
+        """Returns a crisp monospace font for numbers, telemetry, and metrics."""
+        pygame.font.init()
+        key = ("mono", size, bold)
+        if key not in cls._fonts:
+            font: pygame.font.Font | None = None
+            mono_candidates = ["monaco", "menlo", "couriernew", "dejavusansmono"]
+            for name in mono_candidates:
+                path = pygame.font.match_font(name, bold=bold)
+                if path and Path(path).is_file():
+                    try:
+                        font = pygame.font.Font(path, size)
+                        break
+                    except Exception:
+                        continue
+            if font is None:
+                try:
+                    font = pygame.font.SysFont("monaco", size, bold=bold)
+                except Exception:
+                    font = cls.get_font(size, bold=bold)
             cls._fonts[key] = font
         return cls._fonts[key]
