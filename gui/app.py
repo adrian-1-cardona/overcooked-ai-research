@@ -139,8 +139,8 @@ class OvercookedApp:
         self.agent_options = [
             ("Human (Keyboard)", "human"),
             ("PPO (Pretrained RL)", "ppo"),
-            ("Greedy Agent (Upstream)", "greedy"),
-            ("Random Agent", "random"),
+            ("Greedy Chef (Upstream)", "greedy"),
+            ("Random Chef", "random"),
             ("Stay (Idle)", "stay"),
         ]
 
@@ -155,7 +155,7 @@ class OvercookedApp:
         self.step_count = 0
         self.cumulative_score = 0.0
         self.recorded_rows: list[dict[str, Any]] = []
-        self.status_message: str = "Ready. Select agents & layout, then click Run!"
+        self.status_message: str = "Ready. Select chefs & layout, then click Run!"
         self.warning_message: str | None = None
 
         # Background Streamlit process tracker
@@ -328,64 +328,64 @@ class OvercookedApp:
         # Matrix Test Mode Controls
         # -----------------------------
         self.cb_ppo = UICheckbox(
-            (sb_x, 108, sb_w, 22),
+            (sb_x, 108, sb_w, 24),
             "PPO (Self-Play)",
             checked=self.matrix_agents.get("ppo_sp", True),
             on_change=lambda v: self._toggle_matrix_agent("ppo_sp", v),
         )
         self.cb_greedy = UICheckbox(
-            (sb_x, 132, sb_w, 22),
-            "Greedy Agent",
+            (sb_x, 134, sb_w, 24),
+            "Greedy Chef",
             checked=self.matrix_agents.get("greedy", True),
             on_change=lambda v: self._toggle_matrix_agent("greedy", v),
         )
         self.cb_random = UICheckbox(
-            (sb_x, 156, sb_w, 22),
-            "Random Agent",
+            (sb_x, 160, sb_w, 24),
+            "Random Chef",
             checked=self.matrix_agents.get("random", True),
             on_change=lambda v: self._toggle_matrix_agent("random", v),
         )
 
         self.cb_cramped = UICheckbox(
-            (sb_x, 210, sb_w, 20),
+            (sb_x, 212, sb_w, 24),
             "Cramped Room",
             checked=self.matrix_levels.get("cramped_room", True),
             on_change=lambda v: self._toggle_matrix_level("cramped_room", v),
         )
         self.cb_asym = UICheckbox(
-            (sb_x, 232, sb_w, 20),
+            (sb_x, 238, sb_w, 24),
             "Asymmetric Advantages",
             checked=self.matrix_levels.get("asymmetric_advantages", True),
             on_change=lambda v: self._toggle_matrix_level("asymmetric_advantages", v),
         )
         self.cb_ring = UICheckbox(
-            (sb_x, 254, sb_w, 20),
+            (sb_x, 264, sb_w, 24),
             "Coordination Ring",
             checked=self.matrix_levels.get("coordination_ring", False),
             on_change=lambda v: self._toggle_matrix_level("coordination_ring", v),
         )
         self.cb_forced = UICheckbox(
-            (sb_x, 276, sb_w, 20),
+            (sb_x, 290, sb_w, 24),
             "Forced Coordination",
             checked=self.matrix_levels.get("forced_coordination", False),
             on_change=lambda v: self._toggle_matrix_level("forced_coordination", v),
         )
         self.cb_circuit = UICheckbox(
-            (sb_x, 298, sb_w, 20),
+            (sb_x, 316, sb_w, 24),
             "Counter Circuit",
             checked=self.matrix_levels.get("counter_circuit_o_1order", False),
             on_change=lambda v: self._toggle_matrix_level("counter_circuit_o_1order", v),
         )
 
         self.btn_k_minus = UIButton(
-            rect=(sb_x + 130, 328, 28, 26),
+            rect=(sb_x + 130, 350, 28, 26),
             text="-",
             on_click=self._dec_k,
             font_size=15,
             border_radius=0,
         )
         self.btn_k_plus = UIButton(
-            rect=(sb_x + 195, 328, 28, 26),
+            rect=(sb_x + 195, 350, 28, 26),
             text="+",
             on_click=self._inc_k,
             font_size=15,
@@ -999,16 +999,16 @@ class OvercookedApp:
         half_w = (sb_w - 12) // 2
 
         if self.active_mode == "live":
-            # Agent 1 Section
+            # Chef 0 Section
             lbl_font = FontManager.get_font(12, bold=True)
-            a0_lbl = lbl_font.render("Agent 1", True, TEXT_PRIMARY)
+            a0_lbl = lbl_font.render("Chef 0", True, TEXT_PRIMARY)
             self.window.blit(a0_lbl, (sb_x, 88))
             a0_badge_x = sb_x + a0_lbl.get_width() + 10
             UIBanner.draw(self.window, (a0_badge_x, 85, 78, 20), "RED HAT", COLOR_AGENT_RED, font_size=10, bold=True)
             self.dropdown_agent_0.draw(self.window)
 
-            # Agent 2 Section
-            a1_lbl = lbl_font.render("Agent 2", True, TEXT_PRIMARY)
+            # Chef 1 Section
+            a1_lbl = lbl_font.render("Chef 1", True, TEXT_PRIMARY)
             self.window.blit(a1_lbl, (sb_x, 166))
             a1_badge_x = sb_x + a1_lbl.get_width() + 10
             UIBanner.draw(self.window, (a1_badge_x, 163, 78, 20), "BLUE HAT", COLOR_AGENT_BLUE, font_size=10, bold=True)
@@ -1123,11 +1123,12 @@ class OvercookedApp:
             self.cb_circuit.draw(self.window)
 
             # K Stepper Section
-            self.window.blit(f_sec.render("TRIALS PER PAIR (K)", True, TEXT_PRIMARY), (sb_x, 328))
+            self.window.blit(f_sec.render("TRIALS / PAIR (K)", True, TEXT_PRIMARY), (sb_x, 355))
             self.btn_k_minus.draw(self.window)
             f_k = FontManager.get_mono_font(15, bold=True)
             k_surf = f_k.render(str(self.matrix_k), True, TEXT_PRIMARY)
-            self.window.blit(k_surf, (sb_x + 172, 332))
+            k_x = (sb_x + 130 + 28) + (195 - (130 + 28) - k_surf.get_width()) // 2
+            self.window.blit(k_surf, (k_x, 354))
             self.btn_k_plus.draw(self.window)
 
             # Matrix Benchmark Buttons
@@ -1171,12 +1172,24 @@ class OvercookedApp:
     def run(self) -> None:
         """Main application execution loop."""
         print("[GUI] Overcooked-AI Interactive Runner is ready.")
+        sim_accumulator = 0.0
         try:
             while self.running:
+                dt = min(self.clock.tick(60) / 1000.0, 0.2)
                 self.handle_events()
-                self._step_simulation()
+                if self.state == AppState.RUNNING:
+                    sim_accumulator += dt
+                    sim_step_interval = 1.0 / max(1, self.fps)
+                    while sim_accumulator >= sim_step_interval:
+                        self._step_simulation()
+                        sim_accumulator -= sim_step_interval
+                        if self.state != AppState.RUNNING:
+                            sim_accumulator = 0.0
+                            break
+                else:
+                    sim_accumulator = 0.0
+
                 self._draw_frame()
-                self.clock.tick(self.fps if self.state == AppState.RUNNING else 30)
         finally:
             pygame.display.quit()
             pygame.quit()

@@ -68,15 +68,13 @@ class UIButton:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.rect.collidepoint(event.pos):
                 self.is_pressed = True
-                return True
-
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            was_pressed = self.is_pressed
-            self.is_pressed = False
-            if was_pressed and self.rect.collidepoint(event.pos):
                 if self.on_click:
                     self.on_click()
                 return True
+
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.is_pressed = False
+            return False
 
         return False
 
@@ -214,7 +212,7 @@ class UIDropdown:
                     return True
                 else:
                     self.is_open = False
-                    return False
+                    return True
 
         elif event.type == pygame.KEYDOWN and self.is_open:
             if event.key == pygame.K_ESCAPE:
