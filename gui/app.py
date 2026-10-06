@@ -532,8 +532,28 @@ class OvercookedApp:
             except Exception as e:
                 print(f"[GUI] Could not launch Streamlit subprocess: {e}")
 
-        # Open web browser
-        webbrowser.open("http://localhost:8501")
+        # Open web browser once Streamlit health endpoint is ready (avoids connection error modal)
+        self._open_browser_when_ready("http://localhost:8501", 8501)
+
+    def _open_browser_when_ready(self, url: str, port: int) -> None:
+        """Poll Streamlit health endpoint in a background thread and open browser once ready."""
+        def _worker() -> None:
+            import time
+            import urllib.request
+            health_url = f"http://127.0.0.1:{port}/_stcore/health"
+            start_time = time.time()
+            while time.time() - start_time < 8.0:
+                try:
+                    with urllib.request.urlopen(health_url, timeout=0.3) as resp:
+                        if resp.status == 200:
+                            break
+                except Exception:
+                    time.sleep(0.1)
+            time.sleep(0.15)
+            webbrowser.open(url)
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
 
     def _on_mode_changed(self, new_mode: str) -> None:
         self.active_mode = new_mode
@@ -647,7 +667,7 @@ class OvercookedApp:
             except Exception as e:
                 print(f"[GUI] Failed to start matrix Streamlit: {e}")
 
-        webbrowser.open("http://localhost:8502")
+        self._open_browser_when_ready("http://localhost:8502", 8502)
 
     def _save_telemetry(self) -> None:
         """Save recorded gameplay rows to both telemetry CSV locations."""
