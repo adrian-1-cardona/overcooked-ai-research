@@ -39,6 +39,7 @@ class UIButton:
         bold: bool = True,
         border_radius: int = 0,
         border_color: tuple[int, int, int] | None = BORDER_BLACK,
+        is_visible: bool = True,
     ) -> None:
         self.rect = pygame.Rect(rect)
         self.text = text
@@ -53,7 +54,7 @@ class UIButton:
         self.is_hovered = False
         self.is_pressed = False
         self.is_enabled = True
-        self.is_visible = True
+        self.is_visible = is_visible
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.is_visible or not self.is_enabled:

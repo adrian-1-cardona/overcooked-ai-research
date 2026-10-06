@@ -221,6 +221,25 @@ class TestOvercookedGUI(unittest.TestCase):
 
         self.assertEqual(self.app.step_count, 5)
 
+    def test_matrix_view_graphs_only_visible_when_done(self) -> None:
+        """Verify that View Graphs in Matrix mode is ONLY visible when the benchmark is done."""
+        self.app._on_mode_changed("matrix")
+        self.app._draw_frame()
+        # Initially, View Graphs must be hidden
+        self.assertFalse(self.app.btn_matrix_view_graphs.is_visible)
+
+        # While running, View Graphs must remain hidden
+        self.app.matrix_running = True
+        self.app.matrix_done = False
+        self.app._draw_frame()
+        self.assertFalse(self.app.btn_matrix_view_graphs.is_visible)
+
+        # When done, View Graphs must become visible
+        self.app.matrix_running = False
+        self.app.matrix_done = True
+        self.app._draw_frame()
+        self.assertTrue(self.app.btn_matrix_view_graphs.is_visible)
+
 
 if __name__ == "__main__":
     unittest.main()

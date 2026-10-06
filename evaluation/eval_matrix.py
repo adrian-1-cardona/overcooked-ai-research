@@ -156,24 +156,23 @@ def main() -> None:
     total_episodes = total_matchups * k
 
     print("=" * 60)
-    print("🍳 Overcooked-AI Matrix Benchmark Engine")
-    print(f"• Agents (n={n}): {', '.join(agents)}")
-    print(f"• Levels (m={m}): {', '.join(levels)}")
-    print(f"• Trials per pair (k): {k}")
-    print(f"• Horizon per episode: {horizon}")
-    print(f"• Total Matchups: {total_matchups} ({n}x{n} pairings x {m} levels)")
-    print(f"• Total Episodes: {total_episodes}")
-    print(f"• Output Path: {output_path}")
-    print("=" * 60)
+    print("Overcooked-AI Matrix Benchmark Engine")
+    print(f"Agents (n={n}): {', '.join(agents)}")
+    print(f"Levels (m={m}): {', '.join(levels)}")
+    print(f"Trials per pair (k): {k}")
+    print(f"Horizon per episode: {horizon}")
+    print(f"Total Matchups: {total_matchups} ({n}x{n} pairings x {m} levels)")
+    print(f"Total Episodes: {total_episodes}")
+    print(f"Output Path: {output_path}")
+    print("=" * 60, flush=True)
 
     rows: list[dict[str, Any]] = []
     start_time = time.time()
-    completed_matchups = 0
+    completed_episodes = 0
 
     for level in levels:
-        print(f"\n--- [Level: {level}] ---")
+        print(f"\n--- [Level: {level}] ---", flush=True)
         for a0, a1 in itertools.product(agents, repeat=2):
-            completed_matchups += 1
             scores: list[float] = []
             dishes_list: list[int] = []
             collisions_list: list[int] = []
@@ -187,6 +186,7 @@ def main() -> None:
                     horizon=horizon,
                     seed=seed,
                 )
+                completed_episodes += 1
                 scores.append(score)
                 dishes_list.append(dishes)
                 collisions_list.append(collisions)
@@ -201,17 +201,23 @@ def main() -> None:
                     "collisions": collisions,
                 })
 
+                progress = f"[{completed_episodes}/{total_episodes}]"
+                print(
+                    f"{progress} {a0} x {a1} ({level}) Trial {trial+1}/{k}: Score = {score:.1f}, Dishes = {dishes}",
+                    flush=True,
+                )
+
             mean_score = np.mean(scores)
             std_score = np.std(scores)
             mean_dishes = np.mean(dishes_list)
             is_self_play = (a0 == a1)
             play_type = "Self-Play" if is_self_play else "Cross-Play"
 
-            progress = f"[{completed_matchups}/{total_matchups}]"
             print(
-                f"{progress} {a0:>8} x {a1:<8} ({play_type:>10}): "
-                f"Mean Score = {mean_score:5.1f} ± {std_score:4.1f} | "
-                f"Avg Dishes = {mean_dishes:3.1f}"
+                f"    Summary {a0:>8} x {a1:<8} ({play_type:>10}): "
+                f"Mean Score = {mean_score:5.1f} +/- {std_score:4.1f} | "
+                f"Avg Dishes = {mean_dishes:3.1f}",
+                flush=True,
             )
 
     # Save to CSV
@@ -220,12 +226,14 @@ def main() -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+        f.flush()
+        os.fsync(f.fileno())
 
     elapsed = time.time() - start_time
-    print("\n" + "=" * 60)
-    print(f" Benchmark Complete in {elapsed:.1f}s ({total_episodes / max(elapsed, 0.001):.1f} eps/sec)")
-    print(f" Results saved to: {output_path}")
-    print("=" * 60)
+    print("\n" + "=" * 60, flush=True)
+    print(f"Benchmark Complete in {elapsed:.1f}s ({total_episodes / max(elapsed, 0.001):.1f} eps/sec)", flush=True)
+    print(f"Results saved to: {output_path}", flush=True)
+    print("=" * 60, flush=True)
 
 
 if __name__ == "__main__":

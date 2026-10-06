@@ -410,6 +410,7 @@ class OvercookedApp:
             hover_color=COLOR_GRAPH_HOVER,
             text_color=COLOR_GRAPH_TEXT,
             font_size=13,
+            is_visible=False,
         )
 
     def _on_agent_0_changed(self, new_val: str) -> None:
@@ -586,6 +587,7 @@ class OvercookedApp:
         self.matrix_done = False
         self.matrix_progress = 0.0
         self.matrix_status = "Starting benchmark engine..."
+        self.btn_matrix_view_graphs.is_visible = False
 
         thread = threading.Thread(
             target=self._run_matrix_worker,
@@ -602,6 +604,7 @@ class OvercookedApp:
 
         cmd = [
             python_bin,
+            "-u",
             str(script_path),
             "--agents", *agents,
             "--levels", *levels,
@@ -628,7 +631,7 @@ class OvercookedApp:
                         try:
                             bracket = line_clean.split("[")[1].split("]")[0]
                             c, t = bracket.split("/")
-                            self.matrix_progress = min(1.0, max(0.0, int(c) / int(t)))
+                            self.matrix_progress = min(1.0, max(0.0, float(c) / float(t)))
                         except Exception:
                             pass
                 proc.stdout.close()
@@ -638,12 +641,16 @@ class OvercookedApp:
             self.matrix_done = True
             self.matrix_progress = 1.0
             self.matrix_status = "Benchmark Complete! Click 'View Graphs' below."
+            self.btn_matrix_view_graphs.is_visible = True
         except Exception as e:
             self.matrix_running = False
             self.matrix_status = f"Benchmark Error: {e}"
 
     def open_matrix_streamlit_dashboard(self) -> None:
-        """Launch Streamlit matrix dashboard on port 8502 and open browser."""
+        """Launch Streamlit matrix dashboard on port 8502 and open browser. Only accessible when completely done."""
+        if not self.matrix_done or self.matrix_running:
+            return
+
         venv_python = AGENT_EVAL_DIR / ".venv" / "bin" / "python"
         python_bin = str(venv_python) if venv_python.is_file() else sys.executable
         dashboard_script = REPO_ROOT / "dashboard" / "coordination_matrix.py"
@@ -841,7 +848,7 @@ class OvercookedApp:
                     self.btn_k_plus.handle_event(event)
                     self.btn_run_matrix.handle_event(event)
 
-                if self.matrix_done:
+                if self.matrix_done and not self.matrix_running:
                     self.btn_matrix_view_graphs.handle_event(event)
 
     def _draw_frame(self) -> None:
@@ -941,10 +948,14 @@ class OvercookedApp:
             p_bar_rect = pygame.Rect(card_x + 30, p_bar_y, card_w - 60, 16)
             UICard.draw(self.window, p_bar_rect, bg_color=(245, 245, 245), border_color=BORDER_BLACK, border_radius=0, shadow_offset=2)
             if self.matrix_progress > 0:
-                fill_w = int((p_bar_rect.width - 4) * self.matrix_progress)
+                fill_w = max(2, int((p_bar_rect.width - 4) * self.matrix_progress))
                 fill_rect = pygame.Rect(p_bar_rect.x + 2, p_bar_rect.y + 2, fill_w, p_bar_rect.height - 4)
                 p_color = COLOR_DONE_BADGE if self.matrix_done else (100, 105, 115)
                 pygame.draw.rect(self.window, p_color, fill_rect)
+
+            pct_font = FontManager.get_mono_font(11, bold=True)
+            pct_surf = pct_font.render(f"{int(self.matrix_progress * 100)}%", True, TEXT_MUTED)
+            self.window.blit(pct_surf, (p_bar_rect.right - pct_surf.get_width(), p_bar_y - 18))
 
             # Bottom guidance hint
             hint_y = p_bar_y + 35
@@ -1133,7 +1144,8 @@ class OvercookedApp:
 
             # Matrix Benchmark Buttons
             if self.matrix_running:
-                # Disabled running button
+                # Disabled running button while benchmark is actively executing
+                self.btn_matrix_view_graphs.is_visible = False
                 self.btn_run_matrix.text = "Simulating..."
                 self.btn_run_matrix.bg_color = (210, 214, 220)
                 self.btn_run_matrix.hover_color = (210, 214, 220)
@@ -1141,7 +1153,8 @@ class OvercookedApp:
                 self.btn_run_matrix.draw(self.window)
 
             elif self.matrix_done:
-                # View Graphs button (opens Streamlit port 8502)
+                # View Graphs button ONLY appears after the run is completely done
+                self.btn_matrix_view_graphs.is_visible = True
                 self.btn_matrix_view_graphs.rect = pygame.Rect(sb_x, btn_y - 54, sb_w, 44)
                 self.btn_matrix_view_graphs.text = "View Graphs (Streamlit)"
                 self.btn_matrix_view_graphs.draw(self.window)
@@ -1154,6 +1167,8 @@ class OvercookedApp:
                 self.btn_run_matrix.draw(self.window)
 
             else:
+                # Initial setup state before running: View Graphs is hidden
+                self.btn_matrix_view_graphs.is_visible = False
                 self.btn_run_matrix.text = "Run Matrix Benchmark"
                 self.btn_run_matrix.bg_color = COLOR_RUN
                 self.btn_run_matrix.hover_color = COLOR_RUN_HOVER
