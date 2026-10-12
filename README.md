@@ -33,44 +33,10 @@ Activate the environment again before running experiment scripts in a new termin
 Run the default renderer:
 
 ```bash
-python render.py
-```
-
-Common alternatives:
-
-```bash
-python render.py --agent-0 human
-python render.py --plot
-python render.py --agent-0 human --plot
-python render.py --mode video --horizon 200 --output overcooked-agent-eval/results/gameplay.mp4
-python render.py --replay-csv overcooked-agent-eval/results/random_baseline_cramped_room.csv
-python render.py --help
-```
-
-To visualize metrics and graphs from any completed run CSV:
-```bash
-python overcooked-agent-eval/experiments/plot_run.py overcooked-agent-eval/results/random_baseline_cramped_room.csv
-```
-
-In human mode, use WASD or the arrow keys to move and Space, Enter, or F to interact. See [`overcooked-agent-eval/README.md`](overcooked-agent-eval/README.md) for window controls and additional examples.
-
-## Run the Baseline
-
-Run the reproducible random-agent baseline:
-
-```bash
-python overcooked-agent-eval/experiments/run_random_baseline.py
-```
-
-Summarize the generated telemetry:
-
-```bash
-python overcooked-agent-eval/experiments/summarize_episode_metrics.py \
-  overcooked-agent-eval/results/random_baseline_cramped_room.csv
+python runover.py
 ```
 
 Generated results are written under `overcooked-agent-eval/results/` and are ignored by Git.
-
 ## Project Documentation
 
 - [`overcooked-agent-eval/`](overcooked-agent-eval/) contains custom agents, experiments, metrics, and tests.
