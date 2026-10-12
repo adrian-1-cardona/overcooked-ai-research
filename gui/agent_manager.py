@@ -131,7 +131,11 @@ class InteractiveHumanAgent(Agent):
 
 
 def get_available_layouts() -> list[str]:
-    """Return all available Overcooked layouts, prioritizing the main research layouts."""
+    """Return all available Overcooked layouts, prioritizing the main research layouts.
+
+    Filters out test/single-player/4-player layouts so that only verified playable
+    2-player layouts are presented in the GUI.
+    """
     priority_order = [
         "cramped_room",
         "asymmetric_advantages",
@@ -143,12 +147,22 @@ def get_available_layouts() -> list[str]:
         "corridor",
         "large_room",
     ]
+    # Unplayable layouts that are not 2-player cooperative layouts
+    unplayable = {
+        "cramped_room_single",     # 1-player layout
+        "multiplayer_schelling",   # 4-player layout
+        "old_dynamics_cook_test",  # 1-player test layout
+        "old_dynamics_put_test",   # 1-player test layout
+    }
     try:
         from overcooked_ai_py.static import LAYOUTS_DIR
         layout_dir = Path(LAYOUTS_DIR)
         all_found = sorted(p.stem for p in layout_dir.glob("*.layout"))
     except Exception:
         all_found = list(priority_order)
+
+    # Filter unplayable
+    all_found = [name for name in all_found if name not in unplayable]
 
     # Put priority layouts at top
     result: list[str] = [name for name in priority_order if name in all_found]
@@ -187,6 +201,19 @@ def get_ppo_agent(layout_name: str, agent_index: int, mdp: OvercookedGridworld) 
     return agent
 
 
+def is_upstream_greedy_supported(mdp: OvercookedGridworld) -> bool:
+    """Check if upstream GreedyHumanModel / MLAM supports this layout (strictly 3-onion soup only)."""
+    try:
+        orders = getattr(mdp, "start_all_orders", None)
+        if not orders or len(orders) != 1:
+            return False
+        first = orders[0]
+        ingrs = first.get("ingredients") if isinstance(first, dict) else first
+        return list(ingrs) == ["onion", "onion", "onion"]
+    except Exception:
+        return False
+
+
 def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, layout_name: str) -> tuple[Agent, str | None]:
     """
     Factory creating an Agent instance.
@@ -205,24 +232,49 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             try:
                 agent = get_ppo_agent(layout_name, agent_index, mdp)
             except Exception as e:
-                print(f"[Warning] Failed to load PPO ({e}); falling back to Upstream Greedy.")
-                warning = f"PPO load failed: {e}. Falling back to Upstream Greedy."
+                print(f"[Warning] Failed to load PPO ({e}); falling back to Greedy.")
+                warning = f"PPO load failed: {e}. Falling back to Greedy."
+                if is_upstream_greedy_supported(mdp):
+                    try:
+                        from overcooked_ai_py.agents.agent import GreedyHumanModel
+                        from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+                        mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
+                        agent = GreedyHumanModel(mlam)
+                    except Exception:
+                        from agents.greedy_symbol_search import GreedySymbolSearchAgent
+                        agent = GreedySymbolSearchAgent()
+                else:
+                    from agents.greedy_symbol_search import GreedySymbolSearchAgent
+                    agent = GreedySymbolSearchAgent()
+        else:
+            warning = f"No bundled PPO model for '{layout_name}'. Using Greedy agent."
+            if is_upstream_greedy_supported(mdp):
+                try:
+                    from overcooked_ai_py.agents.agent import GreedyHumanModel
+                    from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+                    mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
+                    agent = GreedyHumanModel(mlam)
+                except Exception:
+                    from agents.greedy_symbol_search import GreedySymbolSearchAgent
+                    agent = GreedySymbolSearchAgent()
+            else:
+                from agents.greedy_symbol_search import GreedySymbolSearchAgent
+                agent = GreedySymbolSearchAgent()
+
+    elif agent_type_lower in ("greedy", "greedy agent", "greedy agent (upstream)", "upstream", "upstream (baseline)", "greedy_human_model"):
+        if is_upstream_greedy_supported(mdp):
+            try:
                 from overcooked_ai_py.agents.agent import GreedyHumanModel
                 from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
                 mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
                 agent = GreedyHumanModel(mlam)
+            except Exception:
+                from agents.greedy_symbol_search import GreedySymbolSearchAgent
+                agent = GreedySymbolSearchAgent()
+                warning = f"Upstream Greedy planner unsupported for '{layout_name}'; using GreedySymbolSearchAgent."
         else:
-            warning = f"No bundled PPO model for '{layout_name}'. Using Upstream Greedy agent."
-            from overcooked_ai_py.agents.agent import GreedyHumanModel
-            from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
-            mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
-            agent = GreedyHumanModel(mlam)
-
-    elif agent_type_lower in ("greedy", "greedy agent", "greedy agent (upstream)", "upstream", "upstream (baseline)", "greedy_human_model"):
-        from overcooked_ai_py.agents.agent import GreedyHumanModel
-        from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
-        mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
-        agent = GreedyHumanModel(mlam)
+            from agents.greedy_symbol_search import GreedySymbolSearchAgent
+            agent = GreedySymbolSearchAgent()
 
     elif agent_type_lower in ("random", "random agent"):
         agent = RandomAgent(all_actions=True)
@@ -236,3 +288,4 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
     agent.set_agent_index(agent_index)
     agent.set_mdp(mdp)
     return agent, warning
+

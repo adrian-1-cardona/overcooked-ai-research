@@ -96,10 +96,16 @@ def run_single_episode(
     """
     np.random.seed(seed)
 
-    evaluator = AgentEvaluator.from_layout_name(
-        {"layout_name": layout_name, "old_dynamics": True},
-        {"horizon": horizon},
-    )
+    try:
+        evaluator = AgentEvaluator.from_layout_name(
+            {"layout_name": layout_name, "old_dynamics": True},
+            {"horizon": horizon},
+        )
+    except Exception:
+        evaluator = AgentEvaluator.from_layout_name(
+            {"layout_name": layout_name, "old_dynamics": False},
+            {"horizon": horizon},
+        )
     env = evaluator.env
     mdp = env.mdp
 

@@ -240,6 +240,75 @@ class TestOvercookedGUI(unittest.TestCase):
         self.app._draw_frame()
         self.assertTrue(self.app.btn_matrix_view_graphs.is_visible)
 
+    def test_counter_circuit_loads(self) -> None:
+        """Verify that counter_circuit loads properly with fallback dynamics and updates visualizer."""
+        self.app._on_layout_changed("counter_circuit")
+        self.assertEqual(self.app.current_layout, "counter_circuit")
+        self.assertIsNotNone(self.app.env)
+        self.assertIsNotNone(self.app.mdp)
+        self.assertIsNotNone(self.app.visualizer)
+        self.assertIn("counter_circuit", self.app.status_message)
+
+    def test_unplayable_layouts_filtered(self) -> None:
+        """Verify unplayable non-2-player layouts are excluded from get_available_layouts."""
+        layouts = get_available_layouts()
+        self.assertNotIn("cramped_room_single", layouts)
+        self.assertNotIn("multiplayer_schelling", layouts)
+        self.assertNotIn("old_dynamics_cook_test", layouts)
+        self.assertNotIn("old_dynamics_put_test", layouts)
+        self.assertIn("counter_circuit", layouts)
+        self.assertIn("counter_circuit_o_1order", layouts)
+
+    def test_pause_arrow_keys_fps_adjustment(self) -> None:
+        """Verify that arrow keys UP and DOWN adjust FPS when paused, updating telemetry."""
+        self.app.selected_agent_0_type = "greedy"
+        self.app.selected_agent_1_type = "stay"
+        self.app.start_game()
+        self.app.toggle_pause()
+        self.assertEqual(self.app.state, AppState.PAUSED)
+
+        initial_fps = self.app.fps
+        # Post UP key event
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP))
+        self.app.handle_events()
+        self.assertEqual(self.app.fps, initial_fps + 1)
+        self.assertIn(str(initial_fps + 1), self.app.status_message)
+
+        # Post DOWN key event twice
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN))
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN))
+        self.app.handle_events()
+        self.assertEqual(self.app.fps, initial_fps - 1)
+
+        # Test UI buttons for FPS adjustment
+        self.app.btn_fps_plus.on_click()
+        self.assertEqual(self.app.fps, initial_fps)
+        self.app.btn_fps_minus.on_click()
+        self.assertEqual(self.app.fps, initial_fps - 1)
+
+    def test_pause_frame_stepping_and_rewind(self) -> None:
+        """Verify that RIGHT arrow advances 1 frame and LEFT arrow rewinds 1 frame when paused."""
+        self.app.selected_agent_0_type = "greedy"
+        self.app.selected_agent_1_type = "stay"
+        self.app.start_game()
+        self.app.toggle_pause()
+        self.assertEqual(self.app.state, AppState.PAUSED)
+        self.assertEqual(self.app.step_count, 0)
+
+        # Step forward with RIGHT arrow
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHT))
+        self.app.handle_events()
+        self.assertEqual(self.app.step_count, 1)
+
+        # Step forward with UI Step button
+        self.app.btn_step.on_click()
+        self.assertEqual(self.app.step_count, 2)
+
+        # Step backward with LEFT arrow
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT))
+        self.app.handle_events()
+        self.assertEqual(self.app.step_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

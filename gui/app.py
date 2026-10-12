@@ -155,6 +155,7 @@ class OvercookedApp:
         self.step_count = 0
         self.cumulative_score = 0.0
         self.recorded_rows: list[dict[str, Any]] = []
+        self.history: list[tuple[Any, int, float, list[dict[str, Any]]]] = []
         self.status_message: str = "Ready. Select chefs & layout, then click Run!"
         self.warning_message: str | None = None
 
@@ -198,18 +199,29 @@ class OvercookedApp:
         return self.state in (AppState.RUNNING, AppState.PAUSED)
 
     def _load_environment(self, layout_name: str) -> None:
-        """Load or reload the Overcooked environment and calculate optimal high-res tile size."""
+        """Load or reload the Overcooked environment and calculate optimal high-res tile size.
+
+        Supports both standard layouts (with old_dynamics) and newer custom layouts
+        (such as counter_circuit, tomato layouts, etc.).
+        """
         try:
             self.current_layout = layout_name
-            evaluator = AgentEvaluator.from_layout_name(
-                {"layout_name": layout_name, "old_dynamics": True},
-                {"horizon": self.horizon},
-            )
+            try:
+                evaluator = AgentEvaluator.from_layout_name(
+                    {"layout_name": layout_name, "old_dynamics": True},
+                    {"horizon": self.horizon},
+                )
+            except Exception:
+                evaluator = AgentEvaluator.from_layout_name(
+                    {"layout_name": layout_name, "old_dynamics": False},
+                    {"horizon": self.horizon},
+                )
             self.env = evaluator.env
             self.mdp = self.env.mdp
             self.step_count = 0
             self.cumulative_score = 0.0
             self.recorded_rows.clear()
+            self.history.clear()
             self.status_message = f"Layout '{layout_name}' loaded."
             self.warning_message = None
 
@@ -219,7 +231,7 @@ class OvercookedApp:
             pad = 40
             avail_w = max(100, self.game_pane_width - pad * 2)
             avail_h = max(100, self.window_height - pad * 2)
-            optimal_tile_size = max(40, min(180, int(min(avail_w / grid_w, avail_h / grid_h))))
+            optimal_tile_size = max(30, min(180, int(min(avail_w / grid_w, avail_h / grid_h))))
 
             self.visualizer = StateVisualizer(
                 tile_size=optimal_tile_size,
@@ -278,9 +290,27 @@ class OvercookedApp:
             max_visible_items=8,
         )
 
+        # Live FPS speed adjustment buttons
+        card_y = 318
+        self.btn_fps_minus = UIButton(
+            rect=(sb_x + 135, card_y + 72, 24, 22),
+            text="-",
+            on_click=lambda: self.adjust_fps(-1),
+            font_size=13,
+            border_radius=0,
+        )
+        self.btn_fps_plus = UIButton(
+            rect=(sb_x + 165, card_y + 72, 24, 22),
+            text="+",
+            on_click=lambda: self.adjust_fps(+1),
+            font_size=13,
+            border_radius=0,
+        )
+
         # Bottom Action Buttons
         btn_y = self.window_height - 64
         half_w = (sb_w - 12) // 2
+        tri_w = (sb_w - 16) // 3
 
         self.btn_pause = UIButton(
             rect=(sb_x, btn_y, half_w, 44),
@@ -290,6 +320,17 @@ class OvercookedApp:
             hover_color=COLOR_PAUSE_HOVER,
             text_color=COLOR_PAUSE_TEXT,
             font_size=14,
+        )
+
+        self.btn_step = UIButton(
+            rect=(sb_x + tri_w + 8, btn_y, tri_w, 44),
+            text="Step >",
+            on_click=self.step_forward,
+            bg_color=(225, 230, 240),
+            hover_color=(210, 218, 230),
+            text_color=TEXT_PRIMARY,
+            font_size=14,
+            is_visible=False,
         )
 
         self.btn_reset = UIButton(
@@ -478,6 +519,11 @@ class OvercookedApp:
         self.step_count = 0
         self.cumulative_score = 0.0
         self.recorded_rows.clear()
+        self.history.clear()
+
+        # Save initial state in history
+        import copy
+        self.history.append((copy.deepcopy(self.env.state), 0, 0.0, []))
 
         # Instantiate agents
         a0, warn0 = create_agent(self.selected_agent_0_type, 0, self.mdp, self.current_layout)
@@ -488,17 +534,55 @@ class OvercookedApp:
             self.warning_message = warn0 or warn1
 
         self.state = AppState.RUNNING
-        self.status_message = f"Playing {self.current_layout}!"
+        self.status_message = f"Playing {self.current_layout} ({self.fps} FPS)!"
         self.btn_view_graph.is_visible = False
 
     def toggle_pause(self) -> None:
         """Toggle simulation pause state."""
         if self.state == AppState.RUNNING:
             self.state = AppState.PAUSED
-            self.status_message = "Simulation paused."
+            self.status_message = "Simulation paused. Use Arrow keys: Up/Down for FPS, Right for Step."
         elif self.state == AppState.PAUSED:
             self.state = AppState.RUNNING
-            self.status_message = "Simulation resumed."
+            self.status_message = f"Simulation resumed ({self.fps} FPS)."
+
+    def adjust_fps(self, delta: int) -> None:
+        """Adjust simulation playback speed in FPS and update displayed telemetry."""
+        new_fps = max(1, min(60, self.fps + delta))
+        if new_fps != self.fps:
+            self.fps = new_fps
+            self.status_message = f"Speed set to {self.fps} FPS."
+            print(f"[GUI] Simulation speed: {self.fps} FPS")
+
+    def step_forward(self) -> None:
+        """Advance simulation by exactly one step (useful when paused)."""
+        if self.state == AppState.SETUP:
+            self.start_game()
+            self.state = AppState.PAUSED
+
+        if self.state != AppState.PAUSED:
+            return
+
+        if self.step_count >= self.horizon:
+            self.state = AppState.DONE
+            self.status_message = f"Episode Finished! Final Score: {int(self.cumulative_score)}"
+            self._save_telemetry()
+            return
+
+        self._step_simulation()
+        self.status_message = f"Paused at Step {self.step_count} / {self.horizon}."
+
+    def step_backward(self) -> None:
+        """Step backward by one step if history is available (when paused)."""
+        if self.state != AppState.PAUSED or not self.history:
+            return
+
+        prev_state, prev_step, prev_score, prev_rows = self.history.pop()
+        self.env.state = prev_state
+        self.step_count = prev_step
+        self.cumulative_score = prev_score
+        self.recorded_rows = list(prev_rows)
+        self.status_message = f"Stepped back to Step {self.step_count} / {self.horizon}."
 
     def open_streamlit_dashboard(self) -> None:
         """Launch and display the Streamlit telemetry dashboard. Only accessible when DONE."""
@@ -711,8 +795,18 @@ class OvercookedApp:
 
     def _step_simulation(self) -> None:
         """Advance the Overcooked simulation by one timestep."""
-        if self.state != AppState.RUNNING or not self.agents or self.env is None:
+        if self.state not in (AppState.RUNNING, AppState.PAUSED) or not self.agents or self.env is None:
             return
+
+        import copy
+        self.history.append((
+            copy.deepcopy(self.env.state),
+            self.step_count,
+            self.cumulative_score,
+            list(self.recorded_rows),
+        ))
+        if len(self.history) > 500:
+            self.history.pop(0)
 
         state = self.env.state
         joint_action = tuple(agent.action(state)[0] for agent in self.agents)
@@ -780,12 +874,51 @@ class OvercookedApp:
                         else:
                             self.start_game()
 
-                    # Dispatch keyboard input to interactive human agents
-                    if self.state == AppState.RUNNING and self.agents:
-                        two_humans = sum(isinstance(a, InteractiveHumanAgent) for a in self.agents) > 1
-                        for a in self.agents:
-                            if isinstance(a, InteractiveHumanAgent):
-                                a.handle_keydown(event.key, is_two_player=two_humans)
+                    # Global FPS adjustment keys (+/- or =/_)
+                    elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+                        self.adjust_fps(+1)
+
+                    elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE, pygame.K_KP_MINUS):
+                        self.adjust_fps(-1)
+
+                    # Controls when simulation is PAUSED
+                    elif self.state == AppState.PAUSED:
+                        if event.key == pygame.K_UP:
+                            self.adjust_fps(+1)
+                        elif event.key == pygame.K_DOWN:
+                            self.adjust_fps(-1)
+                        elif event.key == pygame.K_RIGHT:
+                            self.step_forward()
+                        elif event.key == pygame.K_LEFT:
+                            self.step_backward()
+
+                        # Interactive human agent can also act turn-by-turn when paused
+                        elif self.agents:
+                            two_humans = sum(isinstance(a, InteractiveHumanAgent) for a in self.agents) > 1
+                            consumed = False
+                            for a in self.agents:
+                                if isinstance(a, InteractiveHumanAgent):
+                                    if a.handle_keydown(event.key, is_two_player=two_humans):
+                                        consumed = True
+                            if consumed:
+                                self.step_forward()
+
+                    # Controls when simulation is actively RUNNING
+                    elif self.state == AppState.RUNNING:
+                        # Arrow keys adjust FPS if no human agent is using them
+                        has_human = any(isinstance(a, InteractiveHumanAgent) for a in self.agents)
+                        if not has_human:
+                            if event.key == pygame.K_UP:
+                                self.adjust_fps(+1)
+                            elif event.key == pygame.K_DOWN:
+                                self.adjust_fps(-1)
+
+                        # Dispatch keyboard input to interactive human agents
+                        if self.agents:
+                            two_humans = sum(isinstance(a, InteractiveHumanAgent) for a in self.agents) > 1
+                            for a in self.agents:
+                                if isinstance(a, InteractiveHumanAgent):
+                                    a.handle_keydown(event.key, is_two_player=two_humans)
 
             # Top Switchbar always receives events
             if self.switchbar.handle_event(event):
@@ -824,7 +957,14 @@ class OvercookedApp:
                                 self.status_message = f"Locked while {mode_str}. Click RESET to change values."
 
                 # Buttons events in Live Mode
-                if self.is_mid_run:
+                self.btn_fps_minus.handle_event(event)
+                self.btn_fps_plus.handle_event(event)
+
+                if self.state == AppState.PAUSED:
+                    self.btn_pause.handle_event(event)
+                    self.btn_step.handle_event(event)
+                    self.btn_reset.handle_event(event)
+                elif self.state == AppState.RUNNING:
                     self.btn_pause.handle_event(event)
                     self.btn_reset.handle_event(event)
                 elif self.state == AppState.SETUP:
@@ -1046,6 +1186,10 @@ class OvercookedApp:
             self.window.blit(m_step, (sb_x + 12, card_y + 32))
             self.window.blit(m_score, (sb_x + 12, card_y + 54))
             self.window.blit(m_speed, (sb_x + 12, card_y + 76))
+            self.btn_fps_minus.rect = pygame.Rect(sb_x + 135, card_y + 72, 24, 22)
+            self.btn_fps_plus.rect = pygame.Rect(sb_x + 165, card_y + 72, 24, 22)
+            self.btn_fps_minus.draw(self.window)
+            self.btn_fps_plus.draw(self.window)
 
             # Progress bar
             prog_pct = min(1.0, self.step_count / self.horizon) if self.horizon > 0 else 0
@@ -1057,19 +1201,21 @@ class OvercookedApp:
                 pygame.draw.rect(self.window, p_color, fill_rect)
 
             # Controls & Help Card
-            help_y = card_y + card_h + 12
-            help_h = 95
+            help_y = card_y + card_h + 10
+            help_h = 105
             UICard.draw(self.window, (sb_x, help_y, sb_w, help_h), bg_color=BG_CARD_ALT, border_color=BORDER_BLACK, border_radius=0, shadow_offset=2)
             help_t = card_title_font.render("KEYBOARD CONTROLS", True, TEXT_MUTED)
             self.window.blit(help_t, (sb_x + 12, help_y + 8))
 
             h_f = FontManager.get_font(11, bold=False)
-            h1 = h_f.render("- WASD / Arrows : Move Chef 0 (Red)", True, TEXT_SECONDARY)
-            h2 = h_f.render("- Space / Enter : Pick up / Drop / Cook", True, TEXT_SECONDARY)
-            h3 = h_f.render("- [P] Pause / Resume   - [R] Reset", True, TEXT_MUTED)
-            self.window.blit(h1, (sb_x + 12, help_y + 28))
-            self.window.blit(h2, (sb_x + 12, help_y + 48))
-            self.window.blit(h3, (sb_x + 12, help_y + 68))
+            h1 = h_f.render("- Up / Down     : Adjust FPS speed", True, TEXT_SECONDARY)
+            h2 = h_f.render("- Right / Left  : Step forward / back (Paused)", True, TEXT_SECONDARY)
+            h3 = h_f.render("- WASD / Arrows : Move Chef 0 (Red)", True, TEXT_MUTED)
+            h4 = h_f.render("- Space / Enter : Interact  [P] Pause  [R] Reset", True, TEXT_MUTED)
+            self.window.blit(h1, (sb_x + 12, help_y + 26))
+            self.window.blit(h2, (sb_x + 12, help_y + 44))
+            self.window.blit(h3, (sb_x + 12, help_y + 62))
+            self.window.blit(h4, (sb_x + 12, help_y + 80))
 
             if self.warning_message:
                 warn_font = FontManager.get_font(11, bold=False)
@@ -1078,6 +1224,7 @@ class OvercookedApp:
 
             # Live Action Buttons
             if self.state == AppState.SETUP:
+                self.btn_step.is_visible = False
                 self.btn_run.rect = pygame.Rect(sb_x, btn_y, sb_w, 44)
                 self.btn_run.text = "Run"
                 self.btn_run.bg_color = COLOR_RUN
@@ -1086,9 +1233,26 @@ class OvercookedApp:
                 self.btn_run.is_visible = True
                 self.btn_run.draw(self.window)
 
-            elif self.state in (AppState.RUNNING, AppState.PAUSED):
+            elif self.state == AppState.PAUSED:
+                tri_w = (sb_w - 16) // 3
+                self.btn_pause.rect = pygame.Rect(sb_x, btn_y, tri_w, 44)
+                self.btn_pause.text = "Resume"
+                self.btn_pause.is_visible = True
+                self.btn_pause.draw(self.window)
+
+                self.btn_step.rect = pygame.Rect(sb_x + tri_w + 8, btn_y, tri_w, 44)
+                self.btn_step.is_visible = True
+                self.btn_step.draw(self.window)
+
+                self.btn_reset.rect = pygame.Rect(sb_x + (tri_w + 8) * 2, btn_y, tri_w, 44)
+                self.btn_reset.text = "Reset"
+                self.btn_reset.is_visible = True
+                self.btn_reset.draw(self.window)
+
+            elif self.state == AppState.RUNNING:
+                self.btn_step.is_visible = False
                 self.btn_pause.rect = pygame.Rect(sb_x, btn_y, half_w, 44)
-                self.btn_pause.text = "Resume" if self.state == AppState.PAUSED else "Pause"
+                self.btn_pause.text = "Pause"
                 self.btn_pause.is_visible = True
                 self.btn_pause.draw(self.window)
 
@@ -1098,6 +1262,7 @@ class OvercookedApp:
                 self.btn_reset.draw(self.window)
 
             elif self.state == AppState.DONE:
+                self.btn_step.is_visible = False
                 self.btn_view_graph.rect = pygame.Rect(sb_x, btn_y - 54, sb_w, 44)
                 self.btn_view_graph.text = "View Graph (Streamlit)"
                 self.btn_view_graph.is_visible = True
