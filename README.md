@@ -37,6 +37,7 @@ python runover.py
 ```
 
 Generated results are written under `overcooked-agent-eval/results/` and are ignored by Git.
+
 ## Project Documentation
 
 - [`overcooked-agent-eval/`](overcooked-agent-eval/) contains custom agents, experiments, metrics, and tests.
