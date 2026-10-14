@@ -64,6 +64,16 @@ LAYOUT_TO_ASSET_NAME: dict[str, str] = {
 _TRAINER_CACHE: dict[str, Any] = {}
 
 
+def evict_trainer_cache(key_substr: str | None = None) -> None:
+    """Evict cached trainers from memory when agents are deleted or reset."""
+    if key_substr is None:
+        _TRAINER_CACHE.clear()
+    else:
+        keys_to_del = [k for k in _TRAINER_CACHE if key_substr in k]
+        for k in keys_to_del:
+            _TRAINER_CACHE.pop(k, None)
+
+
 class StayAgent(Agent):
     """An agent that always remains stationary."""
 
@@ -282,10 +292,109 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
     elif agent_type_lower in ("stay", "stay agent", "idle"):
         agent = StayAgent()
 
+    elif agent_type_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning"):
+        if is_ppo_supported(layout_name):
+            with suppress_c_stderr():
+                from experiments.run_pretrained_policy_comparison import bundled_checkpoint, load_trainer
+                from human_aware_rl.rllib.rllib import get_agent_from_trainer
+                bc_key = f"bc_{layout_name}"
+                if bc_key not in _TRAINER_CACHE:
+                    checkpoint_path = bundled_checkpoint(layout_name, "BC")
+                    trainer = load_trainer(checkpoint_path)
+                    _TRAINER_CACHE[bc_key] = trainer
+                trainer = _TRAINER_CACHE[bc_key]
+                agent = get_agent_from_trainer(trainer, policy_id="bc", agent_index=agent_index)
+                agent.set_agent_index(agent_index)
+                agent.set_mdp(mdp)
+                agent.reset()
+            return agent, None
+        else:
+            warning = f"BC human model is not bundled for '{layout_name}'; using Greedy Chef."
+            from agents.greedy_symbol_search import GreedySymbolSearchAgent
+            agent = GreedySymbolSearchAgent()
+
+    elif agent_type.startswith("custom:"):
+        model_path = Path(agent_type[len("custom:"):])
+        meta_file = model_path / "metadata.json"
+        if meta_file.is_file():
+            import json
+            with open(meta_file, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            recipe = meta.get("recipe", "ppo_greedy")
+            layout = meta.get("layout_name", layout_name)
+            checkpoint_dirs = sorted(p for p in model_path.glob("checkpoint_*") if p.is_dir())
+            if not checkpoint_dirs:
+                raise FileNotFoundError(f"No checkpoint directory found in {model_path}")
+            latest_ckpt_dir = checkpoint_dirs[-1]
+            ckpt_files = [p for p in latest_ckpt_dir.glob("checkpoint-*") if p.is_file() and not p.name.endswith(".tune_metadata")]
+            if not ckpt_files:
+                raise FileNotFoundError(f"No checkpoint file found in {latest_ckpt_dir}")
+
+            with suppress_c_stderr():
+                from training.train_agent import build_trainer
+                from human_aware_rl.rllib.rllib import RlLibAgent
+
+                trainer_key = str(model_path.resolve())
+                if trainer_key not in _TRAINER_CACHE:
+                    partner_type = meta.get("partner_type", "greedy")
+                    partner_prob = meta.get("partner_prob", None)
+                    trainer, _ = build_trainer(
+                        recipe=recipe,
+                        layout_name=layout,
+                        partner_type=partner_type,
+                        partner_prob=partner_prob,
+                        num_workers=0,
+                    )
+                    trainer.restore(str(ckpt_files[0]))
+                    _TRAINER_CACHE[trainer_key] = trainer
+
+                trainer = _TRAINER_CACHE[trainer_key]
+                policy = trainer.get_policy("ppo")
+                featurize_fn = lambda state, debug=False: mdp.lossless_state_encoding(state, 400)
+                agent = RlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
+                agent.set_agent_index(agent_index)
+                agent.set_mdp(mdp)
+                agent.reset()
+            return agent, None
+        else:
+            with suppress_c_stderr():
+                from experiments.run_pretrained_policy_comparison import load_trainer
+                from human_aware_rl.rllib.rllib import get_agent_from_trainer
+                trainer = load_trainer(model_path)
+                agent = get_agent_from_trainer(trainer, policy_id="ppo", agent_index=agent_index)
+                agent.set_mdp(mdp)
+                agent.reset()
+            return agent, None
+
     else:
         raise ValueError(f"Unknown agent type: {agent_type}")
 
     agent.set_agent_index(agent_index)
     agent.set_mdp(mdp)
     return agent, warning
+
+
+def get_custom_trained_agents() -> list[tuple[str, str]]:
+    """Scan models/ directory for custom trained agent checkpoints."""
+    models_dir = REPO_ROOT / "models"
+    if not models_dir.is_dir():
+        return []
+
+    results: list[tuple[str, str]] = []
+    for p in sorted(models_dir.iterdir()):
+        if not p.is_dir() or p.name.startswith("."):
+            continue
+        has_checkpoint = any(p.glob("checkpoint_*")) or (p / "config.pkl").is_file()
+        if has_checkpoint:
+            name = p.name
+            if "ppo_greedy" in name:
+                label = f"PPO (Trained w/ Greedy)"
+            elif "ppo_50_50" in name:
+                label = f"PPO (50/50 Mix)"
+            elif "ppo_sp" in name:
+                label = f"PPO (Custom Self-Play)"
+            else:
+                label = f"PPO ({name})"
+            results.append((label, f"custom:{p.resolve()}"))
+    return results
 

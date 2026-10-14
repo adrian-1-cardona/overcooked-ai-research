@@ -1,0 +1,15 @@
+[
+  {
+    "id": "jeff_20261014_100822",
+    "name": "Jeff",
+    "layout": "cramped_room",
+    "date_trained": "10/14/2026",
+    "time_trained": "10:48",
+    "agent_1": "ppo",
+    "agent_1_pct": 50,
+    "agent_2": "greedy",
+    "agent_2_pct": 50,
+    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/Jeff",
+    "reward_mean": 12.0
+  }
+]

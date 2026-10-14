@@ -13,10 +13,12 @@ Provides:
 from __future__ import annotations
 
 import csv
+import json
 import os
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from enum import Enum, auto
 from pathlib import Path
@@ -67,7 +69,17 @@ from gui.theme import (
     COLOR_DONE_BADGE,
     FontManager,
 )
-from gui.widgets import UIButton, UIDropdown, UICard, UIBanner, UISwitchbar, UICheckbox
+from gui.widgets import (
+    UIButton,
+    UIDropdown,
+    UICard,
+    UIBanner,
+    UISwitchbar,
+    UICheckbox,
+    UITextInput,
+    UISlider,
+    UIModalConfirm,
+)
 from gui.agent_manager import (
     REPO_ROOT,
     AGENT_EVAL_DIR,
@@ -75,7 +87,10 @@ from gui.agent_manager import (
     create_agent,
     get_available_layouts,
     is_ppo_supported,
+    get_custom_trained_agents,
+    evict_trainer_cache,
 )
+from gui.agent_database import AgentDatabase
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
@@ -89,6 +104,37 @@ DEFAULT_FPS = 10
 DEFAULT_TILE_SIZE = 75
 LAST_RUN_CSV = AGENT_EVAL_DIR / "results" / "last_render_run.csv"
 ALT_LAST_RUN_CSV = REPO_ROOT / "results" / "last_render_run.csv"
+
+RECIPE_INFO: dict[str, dict[str, str]] = {
+    "ppo": {
+        "title": "PPO (Standard) (ppo)",
+        "desc": "100% PPO self-play baseline",
+    },
+    "ppo_sp": {
+        "title": "PPO-SP (Self-Play) (ppo_sp)",
+        "desc": "PPO self-play training",
+    },
+    "ppo_bc": {
+        "title": "PPO-BC (Human Model) (ppo_bc)",
+        "desc": "PPO trained alongside the behavioral cloning human model (50/50 mix)",
+    },
+    "greedy": {
+        "title": "Greedy Specialist (greedy)",
+        "desc": "PPO trained against the heuristic greedy chef",
+    },
+    "ppo_greedy": {
+        "title": "Greedy Specialist (greedy)",
+        "desc": "PPO trained against the heuristic greedy chef",
+    },
+    "ppo_50_50": {
+        "title": "PPO 50/50 Mix (SP + Greedy) (ppo_50_50)",
+        "desc": "Half self-play, half greedy specialist rollouts",
+    },
+    "custom": {
+        "title": "Custom Blend (Sliders) (custom)",
+        "desc": "Custom partner allocation via sliders",
+    },
+}
 
 
 class AppState(Enum):
@@ -136,16 +182,27 @@ class OvercookedApp:
             initial_layout if initial_layout in self.available_layouts else self.available_layouts[0]
         )
 
-        self.agent_options = [
-            ("Human (Keyboard)", "human"),
-            ("PPO (Pretrained RL)", "ppo"),
-            ("Greedy Chef (Upstream)", "greedy"),
-            ("Random Chef", "random"),
-            ("Stay (Idle)", "stay"),
-        ]
+        self.agent_options = self._get_full_agent_options()
 
         self.selected_agent_0_type = "human"
         self.selected_agent_1_type = "ppo"
+
+        # Training Mode State
+        self.train_view = "setup"  # "setup", "active", "complete", "db"
+        self.train_recipe = "custom"
+        self.train_agent_1 = "ppo"
+        self.train_agent_1_pct = 50
+        self.train_agent_2 = "greedy"
+        self.train_agent_2_pct = 50
+        self.train_agent_name = "Jeff"
+        self.train_last_trained_name = "Jeff"
+        self.train_process: subprocess.Popen[Any] | None = None
+        self.train_progress_cur = 0
+        self.train_progress_total = 100
+        self.train_eta_seconds = 2400
+        self.train_last_poll_time = 0.0
+        self.train_eta_str = "0hr 40min"
+        self.train_reward_mean = 0.0
 
         # Game simulation state
         self.mdp: OvercookedGridworld | None = None
@@ -247,16 +304,47 @@ class OvercookedApp:
         except Exception as e:
             self.status_message = f"Error loading layout: {e}"
 
+    def _get_full_agent_options(self) -> list[tuple[str, str]]:
+        custom = get_custom_trained_agents()
+        return [
+            ("Human (Keyboard)", "human"),
+            ("PPO (Pretrained RL)", "ppo"),
+            ("BC (Human Model)", "bc"),
+            *custom,
+            ("Greedy Chef (Upstream)", "greedy"),
+            ("Random Chef", "random"),
+            ("Stay (Idle)", "stay"),
+        ]
+
+    def _refresh_agent_options(self) -> None:
+        self.agent_options = self._get_full_agent_options()
+        if hasattr(self, "dropdown_agent_0"):
+            self.dropdown_agent_0.options = self.agent_options
+        if hasattr(self, "dropdown_agent_1"):
+            self.dropdown_agent_1.options = self.agent_options
+        custom = get_custom_trained_agents()
+        train_opts = [
+            ("PPO (Pretrained RL)", "ppo"),
+            ("BC (Human Model)", "bc"),
+            *custom,
+            ("Greedy Chef", "greedy"),
+            ("Random Chef", "random"),
+        ]
+        if hasattr(self, "dropdown_train_agent_1"):
+            self.dropdown_train_agent_1.options = train_opts
+        if hasattr(self, "dropdown_train_agent_2"):
+            self.dropdown_train_agent_2.options = train_opts
+
     def _setup_widgets(self) -> None:
         """Initialize sidebar switchbar, dropdowns, checkboxes, and buttons."""
         sb_x = self.game_pane_width + 16
         sb_w = SIDEBAR_WIDTH - 32
         item_h = 36
 
-        # Top Mode Switchbar (Live Match vs Matrix Test)
+        # Top Mode Switchbar (Live Game vs Matrix vs Train)
         self.switchbar = UISwitchbar(
             rect=(sb_x, 50, sb_w, 30),
-            options=[("Live Match", "live"), ("Matrix Test", "matrix")],
+            options=[("Live Game", "live"), ("Matrix", "matrix"), ("Train", "train")],
             selected_value=self.active_mode,
             on_change=self._on_mode_changed,
         )
@@ -453,6 +541,370 @@ class OvercookedApp:
             font_size=13,
             is_visible=False,
         )
+
+        # -----------------------------
+        # Train Mode Controls (Images 1, 2, 3, 4)
+        # -----------------------------
+        self.modal_confirm = UIModalConfirm()
+
+        # Image 4: Setup Widgets
+        custom = get_custom_trained_agents()
+        train_agent_opts = [
+            ("PPO (Pretrained RL)", "ppo"),
+            ("BC (Human Model)", "bc"),
+            *custom,
+            ("Greedy Chef", "greedy"),
+            ("Random Chef", "random"),
+        ]
+        recipe_opts = [
+            ("PPO (Standard)", "ppo"),
+            ("PPO-SP (Self-Play)", "ppo_sp"),
+            ("PPO-BC (Human Model)", "ppo_bc"),
+            ("Greedy Specialist", "greedy"),
+            ("PPO 50/50 Mix (SP + Greedy)", "ppo_50_50"),
+            ("Custom Blend (Sliders)", "custom"),
+        ]
+        self.dropdown_train_recipe = UIDropdown(
+            rect=(sb_x, 104, sb_w, 30),
+            options=recipe_opts,
+            selected_value=self.train_recipe,
+            on_change=self._on_recipe_changed,
+        )
+        self.dropdown_train_agent_1 = UIDropdown(
+            rect=(sb_x, 158, sb_w, 30),
+            options=train_agent_opts,
+            selected_value=self.train_agent_1,
+            on_change=self._on_train_agent_1_changed,
+        )
+        self.slider_agent_1 = UISlider(
+            rect=(sb_x, 212, sb_w, 20),
+            value=self.train_agent_1_pct,
+            min_val=0,
+            max_val=100,
+            step=10,
+            on_change=self._on_slider_1_changed,
+        )
+        self.dropdown_train_agent_2 = UIDropdown(
+            rect=(sb_x, 274, sb_w, 30),
+            options=train_agent_opts,
+            selected_value=self.train_agent_2,
+            on_change=self._on_train_agent_2_changed,
+        )
+        self.slider_agent_2 = UISlider(
+            rect=(sb_x, 328, sb_w, 20),
+            value=self.train_agent_2_pct,
+            min_val=0,
+            max_val=100,
+            step=10,
+            on_change=self._on_slider_2_changed,
+        )
+        self.input_agent_name = UITextInput(
+            rect=(sb_x, 392, sb_w, 30),
+            text="Jeff",
+            placeholder="Agent Name",
+            on_change=lambda t: setattr(self, "train_agent_name", t),
+        )
+        self.btn_train_start = UIButton(
+            rect=(sb_x, 434, sb_w, 42),
+            text="TRAIN",
+            on_click=self._start_training,
+            bg_color=COLOR_RUN,
+            hover_color=COLOR_RUN_HOVER,
+            text_color=COLOR_RUN_TEXT,
+            font_size=15,
+        )
+        self.btn_view_all_agents = UIButton(
+            rect=(sb_x + sb_w - 120, self.window_height - 38, 120, 24),
+            text="view all agents",
+            on_click=lambda: setattr(self, "train_view", "db"),
+            font_size=11,
+            border_radius=0,
+        )
+
+        # Image 3: Active Training Widgets
+        self.btn_pause_training = UIButton(
+            rect=(sb_x, 340, sb_w, 42),
+            text="Pause training",
+            on_click=self._pause_or_stop_training,
+            bg_color=COLOR_PAUSE,
+            hover_color=COLOR_PAUSE_HOVER,
+            text_color=COLOR_PAUSE_TEXT,
+            font_size=14,
+        )
+
+        # Image 2: Complete Widgets
+        self.btn_view_jeff = UIButton(
+            rect=(sb_x, 330, sb_w, 42),
+            text="View Jeff",
+            on_click=self._view_trained_agent_live,
+            bg_color=COLOR_RUN,
+            hover_color=COLOR_RUN_HOVER,
+            text_color=COLOR_RUN_TEXT,
+            font_size=14,
+        )
+        self.btn_view_agent_db = UIButton(
+            rect=(sb_x, 390, sb_w, 42),
+            text="View agent DB",
+            on_click=lambda: setattr(self, "train_view", "db"),
+            font_size=14,
+        )
+
+        # Image 1: Database Widgets
+        self.input_search_agent = UITextInput(
+            rect=(sb_x + 95, 114, sb_w - 95, 28),
+            text="",
+            placeholder="Search...",
+        )
+        self.btn_back_to_train = UIButton(
+            rect=(sb_x, self.window_height - 38, sb_w, 28),
+            text="< Back to Train",
+            on_click=lambda: setattr(self, "train_view", "setup"),
+            font_size=12,
+        )
+
+    def _on_recipe_changed(self, new_recipe: str) -> None:
+        self.train_recipe = new_recipe
+        if new_recipe in ("ppo", "ppo_sp"):
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 100
+            self.slider_agent_1.value = 100
+
+            self.train_agent_2 = "ppo"
+            self.dropdown_train_agent_2.selected_value = "ppo"
+            self.train_agent_2_pct = 0
+            self.slider_agent_2.value = 0
+
+        elif new_recipe in ("ppo_bc", "bc"):
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 50
+            self.slider_agent_1.value = 50
+
+            self.train_agent_2 = "bc"
+            self.dropdown_train_agent_2.selected_value = "bc"
+            self.train_agent_2_pct = 50
+            self.slider_agent_2.value = 50
+
+        elif new_recipe in ("greedy", "ppo_greedy"):
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 0
+            self.slider_agent_1.value = 0
+
+            self.train_agent_2 = "greedy"
+            self.dropdown_train_agent_2.selected_value = "greedy"
+            self.train_agent_2_pct = 100
+            self.slider_agent_2.value = 100
+
+        elif new_recipe == "ppo_50_50":
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 50
+            self.slider_agent_1.value = 50
+
+            self.train_agent_2 = "greedy"
+            self.dropdown_train_agent_2.selected_value = "greedy"
+            self.train_agent_2_pct = 50
+            self.slider_agent_2.value = 50
+
+    def _on_train_agent_1_changed(self, new_val: str) -> None:
+        self.train_agent_1 = new_val
+        self._sync_recipe_from_agents()
+
+    def _on_train_agent_2_changed(self, new_val: str) -> None:
+        self.train_agent_2 = new_val
+        self._sync_recipe_from_agents()
+
+    def _on_slider_1_changed(self, new_val: int) -> None:
+        self.train_agent_1_pct = new_val
+        self._sync_recipe_from_agents()
+
+    def _on_slider_2_changed(self, new_val: int) -> None:
+        self.train_agent_2_pct = new_val
+        self._sync_recipe_from_agents()
+
+    def _sync_recipe_from_agents(self) -> None:
+        a1 = self.train_agent_1
+        a2 = self.train_agent_2
+        s1 = self.train_agent_1_pct
+        s2 = self.train_agent_2_pct
+
+        if a1 == "ppo" and a2 == "ppo":
+            matched = "ppo" if self.train_recipe == "ppo" else "ppo_sp"
+        elif a1 == "ppo" and a2 == "bc" and s1 == 50 and s2 == 50:
+            matched = "ppo_bc"
+        elif (a1 == "ppo" and a2 == "greedy" and s1 == 0 and s2 == 100) or (a1 == "greedy" and a2 == "ppo" and s1 == 100 and s2 == 0):
+            matched = "greedy" if self.train_recipe == "greedy" else "ppo_greedy"
+        elif a1 == "ppo" and a2 == "greedy" and s1 == 50 and s2 == 50:
+            matched = "ppo_50_50"
+        else:
+            matched = "custom"
+
+        self.train_recipe = matched
+        if hasattr(self, "dropdown_train_recipe"):
+            self.dropdown_train_recipe.selected_value = matched
+
+    def _start_training(self) -> None:
+        agent_name = self.train_agent_name.strip() or "Jeff"
+        self.train_last_trained_name = agent_name
+        self.btn_view_jeff.text = f"View {agent_name}"
+
+        # Determine partner type and prob
+        recipe = self.train_recipe
+        partner_type = "greedy"
+        partner_prob = 0.5
+
+        if recipe in ("ppo", "ppo_sp"):
+            partner_type = "ppo"
+            partner_prob = 0.0
+        elif recipe in ("ppo_bc", "bc"):
+            partner_type = "bc"
+            partner_prob = 0.5
+        elif recipe in ("greedy", "ppo_greedy"):
+            partner_type = "greedy"
+            partner_prob = 1.0
+        elif recipe == "ppo_50_50":
+            partner_type = "greedy"
+            partner_prob = 0.5
+        else:
+            # Custom blend based on selected agents and sliders
+            a1 = self.train_agent_1
+            a2 = self.train_agent_2
+            s1 = self.train_agent_1_pct
+            s2 = self.train_agent_2_pct
+
+            if a2 in ("bc", "greedy", "random"):
+                partner_type = a2
+                total = max(1, s1 + s2)
+                partner_prob = round(s2 / total, 2)
+            elif a1 in ("bc", "greedy", "random") and a2 == "ppo":
+                partner_type = a1
+                total = max(1, s1 + s2)
+                partner_prob = round(s1 / total, 2)
+            elif a1 == "ppo" and a2 == "ppo":
+                partner_type = "ppo"
+                partner_prob = 0.0
+            else:
+                partner_type = "greedy"
+                partner_prob = round(s2 / max(1, s1 + s2), 2)
+
+        out_dir = REPO_ROOT / "models" / agent_name
+        venv_python = AGENT_EVAL_DIR / ".venv" / "bin" / "python"
+        python_bin = str(venv_python) if venv_python.is_file() else sys.executable
+        cmd = [
+            python_bin,
+            "-m", "training.train_agent",
+            "--recipe", recipe,
+            "--partner-type", partner_type,
+            "--partner-prob", str(partner_prob),
+            "--layout", self.current_layout,
+            "--iters", "100",
+            "--out-dir", str(out_dir),
+        ]
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        if status_file.is_file():
+            try:
+                status_file.unlink()
+            except Exception:
+                pass
+
+        self.train_process = subprocess.Popen(cmd, cwd=str(REPO_ROOT))
+        self.train_view = "active"
+        self.train_progress_cur = 0
+        self.train_progress_total = 100
+        initial_eta = 100 * 24  # Baseline estimate of 40 mins (24s / iter)
+        self.train_eta_seconds = initial_eta
+        hrs = initial_eta // 3600
+        mins = (initial_eta % 3600) // 60
+        self.train_eta_str = f"{hrs}hr {mins}min"
+        self.train_last_poll_time = time.time()
+
+    def _pause_or_stop_training(self) -> None:
+        if self.train_process and self.train_process.poll() is None:
+            self.train_process.terminate()
+            self.train_process = None
+        self.train_view = "setup"
+
+    def _poll_training_progress(self) -> None:
+        if self.train_view != "active":
+            return
+
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        now = time.time()
+
+        if status_file.is_file():
+            try:
+                with open(status_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                self.train_progress_cur = data.get("current_iter", 0)
+                self.train_progress_total = data.get("total_iters", 100)
+                self.train_reward_mean = data.get("reward_mean", 0.0)
+
+                eta_sec = data.get("eta_seconds", None)
+                if eta_sec is not None:
+                    self.train_eta_seconds = max(0, int(eta_sec))
+                    self.train_last_poll_time = now
+
+                if data.get("status") == "completed" or (self.train_process and self.train_process.poll() == 0):
+                    self.train_eta_seconds = 0
+                    self.train_eta_str = "0hr 0min"
+                    model_dir = REPO_ROOT / "models" / self.train_last_trained_name
+                    AgentDatabase.add_agent(
+                        name=self.train_last_trained_name,
+                        layout=self.current_layout,
+                        checkpoint_path=model_dir,
+                        agent_1=self.train_agent_1,
+                        agent_1_pct=self.train_agent_1_pct,
+                        agent_2=self.train_agent_2,
+                        agent_2_pct=self.train_agent_2_pct,
+                        reward_mean=self.train_reward_mean,
+                    )
+                    self._refresh_agent_options()
+                    self.train_view = "complete"
+                    self.train_process = None
+                    return
+            except Exception:
+                pass
+
+        # Calculate smooth countdown between iteration updates
+        if hasattr(self, "train_last_poll_time") and self.train_last_poll_time > 0:
+            elapsed_since_poll = now - self.train_last_poll_time
+            current_eta = max(0, int(self.train_eta_seconds - elapsed_since_poll))
+        else:
+            current_eta = self.train_eta_seconds
+
+        hrs = current_eta // 3600
+        mins = (current_eta % 3600) // 60
+        self.train_eta_str = f"{hrs}hr {mins}min"
+
+    def _view_trained_agent_live(self) -> None:
+        self._refresh_agent_options()
+        self.active_mode = "live"
+        self.switchbar.selected_value = "live"
+        target = self.train_last_trained_name.lower()
+        for label, val in self.agent_options:
+            if target in label.lower() or val.endswith(target):
+                self.selected_agent_0_type = val
+                self.dropdown_agent_0.selected_value = val
+                break
+        self.selected_agent_1_type = "greedy"
+        self.dropdown_agent_1.selected_value = "greedy"
+        self.reset_simulation()
+        self.start_or_resume()
+
+    def _confirm_delete_agent(self, agent_id: str, agent_name: str) -> None:
+        self.modal_confirm.show(
+            title="Are you Sure?",
+            message=f"Delete agent '{agent_name}'?",
+            on_confirm=lambda: self._execute_delete_agent(agent_id),
+        )
+
+    def _execute_delete_agent(self, agent_id: str) -> None:
+        AgentDatabase.delete_agent(agent_id)
+        evict_trainer_cache(agent_id)
+        self._refresh_agent_options()
 
     def _on_agent_0_changed(self, new_val: str) -> None:
         if self.is_mid_run:
@@ -849,6 +1301,11 @@ class OvercookedApp:
                 self.running = False
                 return
 
+            # Modal confirmation dialog intercepts all events if visible
+            if hasattr(self, "modal_confirm") and self.modal_confirm.is_visible:
+                if self.modal_confirm.handle_event(event):
+                    continue
+
             elif event.type == pygame.VIDEORESIZE:
                 self.window_width = max(900, event.w)
                 self.window_height = max(600, event.h)
@@ -991,6 +1448,61 @@ class OvercookedApp:
                 if self.matrix_done and not self.matrix_running:
                     self.btn_matrix_view_graphs.handle_event(event)
 
+            elif self.active_mode == "train":
+                self._handle_train_events(event)
+
+    def _handle_train_events(self, event: pygame.event.Event) -> None:
+        if self.train_view == "setup":
+            dropdowns = [self.dropdown_train_recipe, self.dropdown_train_agent_1, self.dropdown_train_agent_2]
+            open_dd = next((dd for dd in dropdowns if dd.is_open), None)
+            if open_dd is not None:
+                if open_dd.handle_event(event):
+                    return
+            for dd in dropdowns:
+                if dd is not open_dd and dd.handle_event(event):
+                    return
+
+            if self.slider_agent_1.handle_event(event):
+                return
+            if self.slider_agent_2.handle_event(event):
+                return
+            if self.input_agent_name.handle_event(event):
+                return
+            if self.btn_train_start.handle_event(event):
+                return
+            if self.btn_view_all_agents.handle_event(event):
+                return
+
+        elif self.train_view == "active":
+            if self.btn_pause_training.handle_event(event):
+                return
+            if self.btn_view_all_agents.handle_event(event):
+                return
+
+        elif self.train_view == "complete":
+            if self.btn_view_jeff.handle_event(event):
+                return
+            if self.btn_view_agent_db.handle_event(event):
+                return
+
+        elif self.train_view == "db":
+            if self.input_search_agent.handle_event(event):
+                return
+            if self.btn_back_to_train.handle_event(event):
+                return
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                sb_x = self.game_pane_width + 16
+                sb_w = SIDEBAR_WIDTH - 32
+                table_y = 156
+                records = AgentDatabase.search(self.input_search_agent.text)
+                for i, r in enumerate(records[:12]):
+                    ry = table_y + 25 + i * 24
+                    del_rect = pygame.Rect(sb_x + sb_w - 32, ry + 2, 26, 20)
+                    if del_rect.collidepoint(event.pos):
+                        self._confirm_delete_agent(r["id"], r.get("name", "agent"))
+                        return
+
     def _draw_frame(self) -> None:
         """Render the complete application frame with full-sized environment and clean sidebar."""
         self.window.fill(BG_WINDOW)
@@ -1002,8 +1514,8 @@ class OvercookedApp:
             self.window, BG_GAME_FRAME, (0, 0, self.game_pane_width, self.window_height)
         )
 
-        if self.active_mode == "live":
-            # Live environment visualization
+        if self.active_mode in ("live", "train"):
+            # Live environment visualization or training layout preview
             if self.env is not None and self.visualizer is not None:
                 game_surface = self.visualizer.render_state(
                     self.env.state, self.env.mdp.terrain_mtx
@@ -1013,7 +1525,7 @@ class OvercookedApp:
                 orig_w, orig_h = game_surface.get_size()
                 pad = 24
                 avail_w = max(10, self.game_pane_width - pad * 2)
-                avail_h = max(10, self.window_height - pad * 2)
+                avail_h = max(10, self.window_height - pad * 2 - (50 if self.active_mode == "train" else 0))
                 scale = min(avail_w / orig_w, avail_h / orig_h)
                 new_w = max(1, int(orig_w * scale))
                 new_h = max(1, int(orig_h * scale))
@@ -1026,8 +1538,21 @@ class OvercookedApp:
 
                 # Center the kitchen inside the left canvas frame
                 offset_x = (self.game_pane_width - new_w) // 2
-                offset_y = (self.window_height - new_h) // 2
+                offset_y = (self.window_height - new_h) // 2 + (20 if self.active_mode == "train" else 0)
                 self.window.blit(scaled_surface, (offset_x, offset_y))
+
+                if self.active_mode == "train":
+                    banner_w = min(480, self.game_pane_width - 40)
+                    banner_rect = pygame.Rect((self.game_pane_width - banner_w) // 2, 16, banner_w, 32)
+                    if self.train_view == "active":
+                        b_text = f"TRAINING: {self.train_last_trained_name} ({self.train_progress_cur}/{self.train_progress_total})"
+                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=(254, 226, 226), text_color=(220, 38, 38), font_size=12, bold=True)
+                    elif self.train_view == "complete":
+                        b_text = f"TRAINED: {self.train_last_trained_name} READY TO TEST"
+                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=(220, 252, 231), text_color=(22, 101, 52), font_size=12, bold=True)
+                    else:
+                        b_text = f"TRAINING TARGET: {self.current_layout.upper()}"
+                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=BG_CARD_ALT, text_color=TEXT_PRIMARY, font_size=12, bold=True)
 
         elif self.active_mode == "matrix":
             # Matrix Benchmark Dashboard Canvas in RetroUI Style
@@ -1340,14 +1865,255 @@ class OvercookedApp:
                 self.btn_run_matrix.rect = pygame.Rect(sb_x, btn_y, sb_w, 44)
                 self.btn_run_matrix.draw(self.window)
 
+        elif self.active_mode == "train":
+            self._draw_train_mode(sb_x, sb_w)
+
         # ----------------------------------------------------
         # 3. Floating Overlay Pass (Draw open dropdown popups on top in Live Mode)
         # ----------------------------------------------------
         if self.active_mode == "live" and not self.is_mid_run:
             for dd in (self.dropdown_layout, self.dropdown_agent_1, self.dropdown_agent_0):
                 dd.draw_overlay(self.window)
+        elif self.active_mode == "train" and self.train_view == "setup":
+            for dd in (self.dropdown_train_agent_2, self.dropdown_train_agent_1, self.dropdown_train_recipe):
+                dd.draw_overlay(self.window)
+
+        # Modal Confirmation (Draws on top of everything when visible)
+        if hasattr(self, "modal_confirm") and self.modal_confirm.is_visible:
+            self.modal_confirm.draw(self.window)
 
         pygame.display.flip()
+
+    def get_recipe_info(self) -> dict[str, str]:
+        """Return the dictionary containing title and description for the current recipe."""
+        return RECIPE_INFO.get(
+            self.train_recipe,
+            {
+                "title": f"Recipe ({self.train_recipe})",
+                "desc": "Custom partner allocation via sliders",
+            },
+        )
+
+    def _draw_recipe_info_card(self, sb_x: int, sb_w: int, card_y: int) -> None:
+        """Render recipe explanation card at the bottom of the training sidebar."""
+        info = self.get_recipe_info()
+        title_text = info["title"]
+        desc_text = info["desc"]
+
+        card_h = 88
+        card_rect = pygame.Rect(sb_x, card_y, sb_w, card_h)
+        UICard.draw(
+            self.window,
+            card_rect,
+            bg_color=(255, 255, 255),
+            border_color=BORDER_BLACK,
+            shadow_offset=2,
+        )
+
+        f_tag = FontManager.get_font(9, bold=True)
+        tag_surf = f_tag.render("RECIPE INFO:", True, TEXT_MUTED)
+        self.window.blit(tag_surf, (sb_x + 10, card_y + 8))
+
+        f_title = FontManager.get_font(11, bold=True)
+        title_surf = f_title.render(title_text, True, TEXT_PRIMARY)
+        self.window.blit(title_surf, (sb_x + 10, card_y + 24))
+
+        f_desc = FontManager.get_font(11, bold=False)
+        max_text_w = sb_w - 20
+        words = desc_text.split(" ")
+        lines: list[str] = []
+        curr_line: list[str] = []
+        for w in words:
+            test_line = " ".join(curr_line + [w])
+            if f_desc.size(test_line)[0] <= max_text_w:
+                curr_line.append(w)
+            else:
+                if curr_line:
+                    lines.append(" ".join(curr_line))
+                curr_line = [w]
+        if curr_line:
+            lines.append(" ".join(curr_line))
+
+        line_y = card_y + 44
+        for line in lines[:2]:
+            l_surf = f_desc.render(line, True, TEXT_SECONDARY)
+            self.window.blit(l_surf, (sb_x + 10, line_y))
+            line_y += 16
+
+    def _draw_train_mode(self, sb_x: int, sb_w: int) -> None:
+        """Render the 4 Train Mode views matching wireframe drawings."""
+        f_sec = FontManager.get_font(12, bold=True)
+        f_lbl = FontManager.get_font(11, bold=False)
+        f_title = FontManager.get_font(14, bold=True)
+
+        if self.train_view == "setup":
+            # Image 4: Setup View with Recipe Selector
+            self.window.blit(f_sec.render("agent type / recipe:", True, TEXT_PRIMARY), (sb_x, 86))
+            self.dropdown_train_recipe.draw(self.window)
+
+            # Select Agent 1
+            self.window.blit(f_sec.render("select agent 1:", True, TEXT_PRIMARY), (sb_x, 142))
+            self.dropdown_train_agent_1.draw(self.window)
+
+            # Slider 1
+            s1_lbl = f"*Drag to the desired amount: {self.train_agent_1_pct}%"
+            self.window.blit(f_lbl.render(s1_lbl, True, TEXT_MUTED), (sb_x, 196))
+            self.slider_agent_1.draw(self.window)
+
+            # Select Agent 2
+            self.window.blit(f_sec.render("select agent 2:", True, TEXT_PRIMARY), (sb_x, 258))
+            self.dropdown_train_agent_2.draw(self.window)
+
+            # Slider 2
+            s2_lbl = f"*Drag to the desired amount: {self.train_agent_2_pct}%"
+            self.window.blit(f_lbl.render(s2_lbl, True, TEXT_MUTED), (sb_x, 312))
+            self.slider_agent_2.draw(self.window)
+
+            # Name Agent
+            self.window.blit(f_sec.render("name agent:", True, TEXT_PRIMARY), (sb_x, 374))
+            self.input_agent_name.draw(self.window)
+
+            # Train Button
+            self.btn_train_start.draw(self.window)
+
+            # Recipe Info Card on the bottom of the menu
+            card_y = min(488, self.window_height - 38 - 88 - 8)
+            self._draw_recipe_info_card(sb_x, sb_w, card_y)
+
+            # View All Agents link button
+            self.btn_view_all_agents.draw(self.window)
+
+        elif self.train_view == "active":
+            # Image 3: Active Training View
+            card_rect = pygame.Rect(sb_x, 100, sb_w, 60)
+            UICard.draw(self.window, card_rect, bg_color=(255, 255, 255), border_color=BORDER_BLACK, shadow_offset=2)
+            t_surf = f_title.render("Training . . .", True, TEXT_PRIMARY)
+            self.window.blit(t_surf, t_surf.get_rect(center=(card_rect.centerx, card_rect.centery - 10)))
+            f_sub = FontManager.get_font(10, bold=False)
+            recipe_display = self.train_recipe.upper().replace("_", " ")
+            r_surf = f_sub.render(f"Recipe: {recipe_display}", True, TEXT_MUTED)
+            self.window.blit(r_surf, r_surf.get_rect(center=(card_rect.centerx, card_rect.centery + 14)))
+
+            fraction = max(0.0, min(1.0, self.train_progress_cur / max(1, self.train_progress_total)))
+            pct = int(round(fraction * 100))
+            pb_lbl = f"Progress Bar: {self.train_progress_cur}/{self.train_progress_total} ({pct}%)"
+            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 180))
+
+            pb_rect = pygame.Rect(sb_x, 204, sb_w, 36)
+            pygame.draw.rect(self.window, SHADOW_BLACK, pb_rect.move(2, 2))
+            pygame.draw.rect(self.window, (255, 255, 255), pb_rect)
+
+            fill_w = int(pb_rect.width * fraction)
+            if fill_w > 0:
+                fill_r = pygame.Rect(pb_rect.x, pb_rect.y, fill_w, pb_rect.height)
+                pygame.draw.rect(self.window, (248, 113, 113), fill_r)
+                for x in range(pb_rect.x + 4, pb_rect.x + fill_w, 10):
+                    pygame.draw.line(self.window, (220, 38, 38), (x, pb_rect.bottom - 2), (min(pb_rect.x + fill_w, x + 8), pb_rect.y + 2), width=2)
+
+            pygame.draw.rect(self.window, BORDER_BLACK, pb_rect, width=2)
+
+            eta_lbl = f"Estimated Time: {self.train_eta_str}"
+            self.window.blit(f_lbl.render(eta_lbl, True, TEXT_PRIMARY), (sb_x, 252))
+
+            self.btn_pause_training.draw(self.window)
+
+            # Recipe Info Card on the bottom of the active menu
+            active_info_y = min(400, self.window_height - 38 - 88 - 8)
+            self._draw_recipe_info_card(sb_x, sb_w, active_info_y)
+
+            self.btn_view_all_agents.draw(self.window)
+
+        elif self.train_view == "complete":
+            # Image 2: Training Complete View
+            card_rect = pygame.Rect(sb_x, 100, sb_w, 60)
+            UICard.draw(self.window, card_rect, bg_color=(255, 255, 255), border_color=BORDER_BLACK, shadow_offset=2)
+            t_surf = f_title.render("Training Complete!", True, (22, 163, 74))
+            self.window.blit(t_surf, t_surf.get_rect(center=card_rect.center))
+
+            pb_lbl = "Progress Bar: 100/100 (100%)"
+            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 180))
+
+            pb_rect = pygame.Rect(sb_x, 204, sb_w, 36)
+            pygame.draw.rect(self.window, SHADOW_BLACK, pb_rect.move(2, 2))
+            pygame.draw.rect(self.window, (248, 113, 113), pb_rect)
+            for x in range(pb_rect.x + 4, pb_rect.right, 10):
+                pygame.draw.line(self.window, (220, 38, 38), (x, pb_rect.bottom - 2), (min(pb_rect.right, x + 8), pb_rect.y + 2), width=2)
+            pygame.draw.rect(self.window, BORDER_BLACK, pb_rect, width=2)
+
+            self.window.blit(f_lbl.render("Estimated Time: 0hr 0min", True, TEXT_PRIMARY), (sb_x, 252))
+
+            self.btn_view_jeff.draw(self.window)
+            self.btn_view_agent_db.draw(self.window)
+
+            # Recipe Info Card on the bottom of the complete menu
+            complete_info_y = min(448, self.window_height - 38 - 88 - 8)
+            self._draw_recipe_info_card(sb_x, sb_w, complete_info_y)
+
+        elif self.train_view == "db":
+            # Image 1: Agent Database View
+            banner_rect = pygame.Rect(sb_x, 88, sb_w, 28)
+            UIBanner.draw(self.window, banner_rect, "Agent DataBase", bg_color=(243, 244, 246), text_color=TEXT_PRIMARY, font_size=13)
+
+            self.window.blit(f_sec.render("Search agent:", True, TEXT_PRIMARY), (sb_x, 126))
+            self.input_search_agent.rect.topleft = (sb_x + 95, 122)
+            self.input_search_agent.draw(self.window)
+
+            table_y = 156
+            table_h = self.window_height - table_y - 50
+            table_rect = pygame.Rect(sb_x, table_y, sb_w, table_h)
+            pygame.draw.rect(self.window, SHADOW_BLACK, table_rect.move(2, 2))
+            pygame.draw.rect(self.window, (255, 255, 255), table_rect)
+            pygame.draw.rect(self.window, BORDER_BLACK, table_rect, width=2)
+
+            header_rect = pygame.Rect(sb_x, table_y, sb_w, 24)
+            pygame.draw.rect(self.window, (243, 244, 246), header_rect)
+            pygame.draw.line(self.window, BORDER_BLACK, (sb_x, table_y + 24), (sb_x + sb_w, table_y + 24), width=1)
+
+            col_x1 = sb_x + 6
+            col_x2 = sb_x + 72
+            col_x3 = sb_x + 140
+            col_x4 = sb_x + sb_w - 34
+
+            f_th = FontManager.get_font(10, bold=True)
+            self.window.blit(f_th.render("Name", True, TEXT_PRIMARY), (col_x1, table_y + 6))
+            self.window.blit(f_th.render("date trained", True, TEXT_PRIMARY), (col_x2, table_y + 6))
+            self.window.blit(f_th.render("Time", True, TEXT_PRIMARY), (col_x3, table_y + 6))
+            self.window.blit(f_th.render("Delete", True, TEXT_PRIMARY), (col_x4, table_y + 6))
+
+            pygame.draw.line(self.window, (200, 205, 215), (col_x2 - 4, table_y), (col_x2 - 4, table_y + table_h), width=1)
+            pygame.draw.line(self.window, (200, 205, 215), (col_x3 - 4, table_y), (col_x3 - 4, table_y + table_h), width=1)
+            pygame.draw.line(self.window, (200, 205, 215), (col_x4 - 4, table_y), (col_x4 - 4, table_y + table_h), width=1)
+
+            records = AgentDatabase.search(self.input_search_agent.text)
+            f_td = FontManager.get_font(10)
+            max_rows = (table_h - 26) // 24
+
+            if not records:
+                empty_lbl = f_lbl.render("No agents trained yet.", True, TEXT_MUTED)
+                self.window.blit(empty_lbl, (sb_x + 20, table_y + 36))
+            else:
+                for i, r in enumerate(records[:max_rows]):
+                    ry = table_y + 25 + i * 24
+                    pygame.draw.line(self.window, (230, 233, 238), (sb_x, ry + 23), (sb_x + sb_w, ry + 23), width=1)
+
+                    name_txt = r.get("name", "agent")
+                    if len(name_txt) > 10:
+                        name_txt = name_txt[:9] + ".."
+                    self.window.blit(f_td.render(name_txt, True, TEXT_PRIMARY), (col_x1, ry + 5))
+                    self.window.blit(f_td.render(r.get("date_trained", ""), True, TEXT_SECONDARY), (col_x2, ry + 5))
+                    self.window.blit(f_td.render(r.get("time_trained", ""), True, TEXT_SECONDARY), (col_x3, ry + 5))
+
+                    del_btn_rect = pygame.Rect(sb_x + sb_w - 32, ry + 2, 26, 20)
+                    mouse_pos = pygame.mouse.get_pos()
+                    is_hov = del_btn_rect.collidepoint(mouse_pos)
+                    btn_col = (254, 226, 226) if is_hov else (243, 244, 246)
+                    pygame.draw.rect(self.window, btn_col, del_btn_rect)
+                    pygame.draw.rect(self.window, BORDER_BLACK, del_btn_rect, width=1)
+                    f_x = FontManager.get_font(11, bold=True)
+                    x_surf = f_x.render("X", True, (220, 38, 38))
+                    self.window.blit(x_surf, x_surf.get_rect(center=del_btn_rect.center))
+
+            self.btn_back_to_train.draw(self.window)
 
     def run(self) -> None:
         """Main application execution loop."""
@@ -1356,6 +2122,7 @@ class OvercookedApp:
         try:
             while self.running:
                 dt = min(self.clock.tick(60) / 1000.0, 0.2)
+                self._poll_training_progress()
                 self.handle_events()
                 if self.state == AppState.RUNNING:
                     sim_accumulator += dt

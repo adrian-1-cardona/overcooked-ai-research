@@ -101,8 +101,8 @@ def parse_telemetry_csv(csv_path: Path) -> list[dict[str, Any]]:
 def plot_run_dashboard(
     rows: Sequence[dict[str, Any]],
     layout_name: str = "Unknown Layout",
-    agent_0_label: str = "Chef 0",
-    agent_1_label: str = "Chef 1",
+    agent_0_label: str = "Chef 0 (Red Hat)",
+    agent_1_label: str = "Chef 1 (Blue Hat)",
     output_path: Path | None = None,
     show: bool = True,
 ) -> Path | None:
@@ -223,8 +223,8 @@ def plot_run_dashboard(
     # Panel 2 (Top-Right): Shaped Rewards (Subtask Contributions)
     # -------------------------------------------------------------------------
     ax2 = axes[0, 1]
-    ax2.plot(timesteps, a0_shaped_cum, color="#0284c7", linewidth=2, label=f"{agent_0_label} (Potting/Dishes)")
-    ax2.plot(timesteps, a1_shaped_cum, color="#ea580c", linewidth=2, label=f"{agent_1_label} (Potting/Dishes)")
+    ax2.plot(timesteps, a0_shaped_cum, color="#dc2626", linewidth=2, label=f"{agent_0_label} (Potting/Dishes)")
+    ax2.plot(timesteps, a1_shaped_cum, color="#2563eb", linewidth=2, label=f"{agent_1_label} (Potting/Dishes)")
     ax2.set_title("Intermediate Shaped Reward Progression", fontsize=12, fontweight="bold", pad=8)
     ax2.set_xlabel("Timestep", fontsize=10)
     ax2.set_ylabel("Cumulative Shaped Reward", fontsize=10)
@@ -245,8 +245,8 @@ def plot_run_dashboard(
     y_pos = np.arange(len(categories))
     bar_height = 0.35
 
-    rects1 = ax3.barh(y_pos - bar_height / 2, c0_pct, bar_height, label=agent_0_label, color="#38bdf8", edgecolor="#0284c7")
-    rects2 = ax3.barh(y_pos + bar_height / 2, c1_pct, bar_height, label=agent_1_label, color="#fb923c", edgecolor="#ea580c")
+    rects1 = ax3.barh(y_pos - bar_height / 2, c0_pct, bar_height, label=agent_0_label, color="#f87171", edgecolor="#dc2626")
+    rects2 = ax3.barh(y_pos + bar_height / 2, c1_pct, bar_height, label=agent_1_label, color="#60a5fa", edgecolor="#2563eb")
 
     # Add percentages on bars
     for rect, pct, count in zip(rects1, c0_pct, c0_counts):
@@ -274,9 +274,9 @@ def plot_run_dashboard(
     r_channel = 1.0 - 0.8 * (grid_a0 / max_visits)
     b_channel = 1.0 - 0.8 * (grid_a1 / max_visits)
     g_channel = 1.0 - 0.5 * ((grid_a0 + grid_a1) / (2 * max_visits))
-    rgb_map[:, :, 0] = np.clip(b_channel, 0.1, 1.0)
+    rgb_map[:, :, 0] = np.clip(r_channel, 0.1, 1.0)
     rgb_map[:, :, 1] = np.clip(g_channel, 0.1, 1.0)
-    rgb_map[:, :, 2] = np.clip(r_channel, 0.1, 1.0)
+    rgb_map[:, :, 2] = np.clip(b_channel, 0.1, 1.0)
 
     ax4.imshow(rgb_map, origin="upper", aspect="equal")
 
@@ -296,7 +296,7 @@ def plot_run_dashboard(
     ax4.set_yticks(range(grid_h))
     ax4.set_xlabel("Grid X", fontsize=10)
     ax4.set_ylabel("Grid Y", fontsize=10)
-    ax4.set_title("Tile Visits (Chef 0 | Chef 1)", fontsize=12, fontweight="bold", pad=8)
+    ax4.set_title("Tile Visits (Chef 0 Red | Chef 1 Blue)", fontsize=12, fontweight="bold", pad=8)
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.94])
 
@@ -339,14 +339,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--agent-0",
         type=str,
-        default="Chef 0",
-        help="Label for Agent 0 (default: Chef 0)",
+        default="Chef 0 (Red Hat)",
+        help="Label for Agent 0 (default: Chef 0 (Red Hat))",
     )
     parser.add_argument(
         "--agent-1",
         type=str,
-        default="Chef 1",
-        help="Label for Agent 1 (default: Chef 1)",
+        default="Chef 1 (Blue Hat)",
+        help="Label for Agent 1 (default: Chef 1 (Blue Hat))",
     )
     parser.add_argument(
         "--no-show",
