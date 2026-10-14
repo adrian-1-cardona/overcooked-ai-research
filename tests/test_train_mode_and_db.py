@@ -190,6 +190,61 @@ class TestTrainModeAndDB(unittest.TestCase):
         # Assert removed from registry
         self.assertNotIn("TestJeff_Bot", [r["name"] for r in AgentDatabase.search()])
 
+    def test_training_live_terminal_pause_and_stop_controls(self):
+        from unittest.mock import MagicMock, patch
+        import signal
+
+        self.app.active_mode = "train"
+        self.app.train_view = "active"
+
+        # Verify buttons exist with correct attributes
+        self.assertEqual(self.app.btn_view_training_live.text, "View Training Live")
+        self.assertEqual(self.app.btn_pause_training.text, "Pause training")
+        self.assertEqual(self.app.btn_stop_training.text, "Stop training")
+
+        # Verify drawing while active and paused
+        self.app.train_is_paused = False
+        self.app._draw_frame()
+
+        self.app.train_is_paused = True
+        self.app._draw_frame()
+
+        # Mock training process
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.pid = 99999
+        self.app.train_process = mock_proc
+        self.app.train_is_paused = False
+
+        # Test pause toggle -> sends SIGSTOP, updates button text to Resume training
+        with patch("os.kill") as mock_kill:
+            self.app._toggle_pause_training()
+            mock_kill.assert_called_once_with(99999, signal.SIGSTOP)
+            self.assertTrue(self.app.train_is_paused)
+            self.assertEqual(self.app.btn_pause_training.text, "Resume training")
+
+        # Test resume toggle -> sends SIGCONT, updates button text to Pause training
+        with patch("os.kill") as mock_kill:
+            self.app._toggle_pause_training()
+            mock_kill.assert_called_once_with(99999, signal.SIGCONT)
+            self.assertFalse(self.app.train_is_paused)
+            self.assertEqual(self.app.btn_pause_training.text, "Pause training")
+
+        # Test stop training -> terminates process, cleans up and returns to setup view
+        self.app._stop_training()
+        mock_proc.terminate.assert_called_once()
+        self.assertIsNone(self.app.train_process)
+        self.assertFalse(self.app.train_is_paused)
+        self.assertEqual(self.app.train_view, "setup")
+
+        # Test opening live terminal uses osascript with tail -f
+        with patch("subprocess.Popen") as mock_sub:
+            self.app._open_live_training_terminal()
+            mock_sub.assert_called_once()
+            args = mock_sub.call_args[0][0]
+            self.assertEqual(args[0], "osascript")
+            self.assertIn("tail -f", args[2])
+
 
 if __name__ == "__main__":
     unittest.main()

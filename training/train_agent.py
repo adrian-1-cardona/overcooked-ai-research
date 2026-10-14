@@ -194,15 +194,18 @@ def build_trainer(
         "policies_to_train": ["ppo"],
     }
 
+    rollout_fragment_length = (train_batch_size // num_workers) if num_workers > 0 else 400
+
     trainer_config = {
         "env": env_name,
         "env_config": env_config,
         "multiagent": multiagent_config,
+        "disable_env_checking": True,
         "num_workers": num_workers,
         "num_gpus": 0,
         "train_batch_size": train_batch_size,
         "sgd_minibatch_size": sgd_minibatch_size,
-        "rollout_fragment_length": 400,
+        "rollout_fragment_length": rollout_fragment_length,
         "num_sgd_iter": 4,
         "lr": lr,
         "gamma": 0.99,

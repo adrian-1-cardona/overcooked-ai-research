@@ -15,6 +15,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -203,6 +204,8 @@ class OvercookedApp:
         self.train_last_poll_time = 0.0
         self.train_eta_str = "0hr 40min"
         self.train_reward_mean = 0.0
+        self.train_is_paused = False
+        self.train_log_file: Any | None = None
 
         # Game simulation state
         self.mdp: OvercookedGridworld | None = None
@@ -622,14 +625,33 @@ class OvercookedApp:
         )
 
         # Image 3: Active Training Widgets
+        half_train_btn_w = (sb_w - 8) // 2
+        self.btn_view_training_live = UIButton(
+            rect=(sb_x, 284, sb_w, 34),
+            text="View Training Live",
+            on_click=self._open_live_training_terminal,
+            bg_color=(235, 238, 245),
+            hover_color=(220, 225, 235),
+            text_color=(0, 0, 0),
+            font_size=13,
+        )
         self.btn_pause_training = UIButton(
-            rect=(sb_x, 340, sb_w, 42),
+            rect=(sb_x, 326, half_train_btn_w, 36),
             text="Pause training",
-            on_click=self._pause_or_stop_training,
+            on_click=self._toggle_pause_training,
             bg_color=COLOR_PAUSE,
             hover_color=COLOR_PAUSE_HOVER,
             text_color=COLOR_PAUSE_TEXT,
-            font_size=14,
+            font_size=13,
+        )
+        self.btn_stop_training = UIButton(
+            rect=(sb_x + half_train_btn_w + 8, 326, half_train_btn_w, 36),
+            text="Stop training",
+            on_click=self._stop_training,
+            bg_color=(245, 215, 215),
+            hover_color=(235, 195, 195),
+            text_color=(150, 20, 20),
+            font_size=13,
         )
 
         # Image 2: Complete Widgets
@@ -794,6 +816,7 @@ class OvercookedApp:
         python_bin = str(venv_python) if venv_python.is_file() else sys.executable
         cmd = [
             python_bin,
+            "-u",
             "-m", "training.train_agent",
             "--recipe", recipe,
             "--partner-type", partner_type,
@@ -809,7 +832,31 @@ class OvercookedApp:
             except Exception:
                 pass
 
-        self.train_process = subprocess.Popen(cmd, cwd=str(REPO_ROOT))
+        if hasattr(self, "train_log_file") and self.train_log_file is not None:
+            try:
+                self.train_log_file.close()
+            except Exception:
+                pass
+            self.train_log_file = None
+
+        log_path = REPO_ROOT / "results" / "training_live.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.train_log_file = open(log_path, "w", buffering=1, encoding="utf-8")
+
+        env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
+
+        self.train_process = subprocess.Popen(
+            cmd,
+            cwd=str(REPO_ROOT),
+            stdout=self.train_log_file,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+        self.train_is_paused = False
+        self.btn_pause_training.text = "Pause training"
+        self.btn_pause_training.bg_color = COLOR_PAUSE
+        self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
         self.train_view = "active"
         self.train_progress_cur = 0
         self.train_progress_total = 100
@@ -820,18 +867,81 @@ class OvercookedApp:
         self.train_eta_str = f"{hrs}hr {mins}min"
         self.train_last_poll_time = time.time()
 
-    def _pause_or_stop_training(self) -> None:
+    def _open_live_training_terminal(self) -> None:
+        log_file = REPO_ROOT / "results" / "training_live.log"
+        if not log_file.exists():
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            log_file.write_text("Waiting for training process output...\n", encoding="utf-8")
+        escaped_path = str(log_file.resolve()).replace("'", "\\'")
+        cmd_script = f"clear; echo 'Streaming live training logs ({log_file.name})...'; tail -f '{escaped_path}'"
+        apple_script = f'tell application "Terminal" to do script "{cmd_script}"\ntell application "Terminal" to activate'
+        try:
+            subprocess.Popen(["osascript", "-e", apple_script])
+        except Exception as e:
+            print(f"[GUI] Failed to open live terminal: {e}")
+
+    def _toggle_pause_training(self) -> None:
+        if not self.train_process or self.train_process.poll() is not None:
+            return
+
+        if not self.train_is_paused:
+            try:
+                os.kill(self.train_process.pid, signal.SIGSTOP)
+                self.train_is_paused = True
+                self.btn_pause_training.text = "Resume training"
+                self.btn_pause_training.bg_color = (210, 245, 220)
+                self.btn_pause_training.hover_color = (190, 235, 205)
+            except Exception as e:
+                print(f"[GUI] Error pausing training: {e}")
+        else:
+            try:
+                os.kill(self.train_process.pid, signal.SIGCONT)
+                self.train_is_paused = False
+                self.train_last_poll_time = time.time()
+                self.btn_pause_training.text = "Pause training"
+                self.btn_pause_training.bg_color = COLOR_PAUSE
+                self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
+            except Exception as e:
+                print(f"[GUI] Error resuming training: {e}")
+
+    def _stop_training(self) -> None:
         if self.train_process and self.train_process.poll() is None:
-            self.train_process.terminate()
-            self.train_process = None
+            if self.train_is_paused:
+                try:
+                    os.kill(self.train_process.pid, signal.SIGCONT)
+                except Exception:
+                    pass
+            try:
+                self.train_process.terminate()
+                self.train_process.wait(timeout=2)
+            except Exception:
+                try:
+                    self.train_process.kill()
+                except Exception:
+                    pass
+        self.train_process = None
+        self.train_is_paused = False
+        if hasattr(self, "train_log_file") and self.train_log_file is not None:
+            try:
+                self.train_log_file.close()
+            except Exception:
+                pass
+            self.train_log_file = None
+        self.btn_pause_training.text = "Pause training"
+        self.btn_pause_training.bg_color = COLOR_PAUSE
+        self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
         self.train_view = "setup"
 
     def _poll_training_progress(self) -> None:
         if self.train_view != "active":
             return
 
-        status_file = REPO_ROOT / "results" / "training_status.json"
         now = time.time()
+
+        if self.train_is_paused:
+            self.train_last_poll_time = now
+
+        status_file = REPO_ROOT / "results" / "training_status.json"
 
         if status_file.is_file():
             try:
@@ -864,12 +974,34 @@ class OvercookedApp:
                     self._refresh_agent_options()
                     self.train_view = "complete"
                     self.train_process = None
+                    self.train_is_paused = False
+                    if hasattr(self, "train_log_file") and self.train_log_file is not None:
+                        try:
+                            self.train_log_file.close()
+                        except Exception:
+                            pass
+                        self.train_log_file = None
                     return
             except Exception:
                 pass
 
+        if self.train_process and self.train_process.poll() is not None:
+            ret = self.train_process.poll()
+            if ret != 0:
+                print(f"[GUI] Training process exited unexpectedly with code {ret}.")
+                self.train_process = None
+                self.train_is_paused = False
+                if hasattr(self, "train_log_file") and self.train_log_file is not None:
+                    try:
+                        self.train_log_file.close()
+                    except Exception:
+                        pass
+                    self.train_log_file = None
+                self.train_view = "setup"
+                return
+
         # Calculate smooth countdown between iteration updates
-        if hasattr(self, "train_last_poll_time") and self.train_last_poll_time > 0:
+        if hasattr(self, "train_last_poll_time") and self.train_last_poll_time > 0 and not self.train_is_paused:
             elapsed_since_poll = now - self.train_last_poll_time
             current_eta = max(0, int(self.train_eta_seconds - elapsed_since_poll))
         else:
@@ -1474,7 +1606,11 @@ class OvercookedApp:
                 return
 
         elif self.train_view == "active":
+            if self.btn_view_training_live.handle_event(event):
+                return
             if self.btn_pause_training.handle_event(event):
+                return
+            if self.btn_stop_training.handle_event(event):
                 return
             if self.btn_view_all_agents.handle_event(event):
                 return
@@ -1987,7 +2123,8 @@ class OvercookedApp:
             # Image 3: Active Training View
             card_rect = pygame.Rect(sb_x, 100, sb_w, 60)
             UICard.draw(self.window, card_rect, bg_color=(255, 255, 255), border_color=BORDER_BLACK, shadow_offset=2)
-            t_surf = f_title.render("Training . . .", True, TEXT_PRIMARY)
+            title_text = "Training (Paused) . . ." if self.train_is_paused else "Training . . ."
+            t_surf = f_title.render(title_text, True, TEXT_PRIMARY)
             self.window.blit(t_surf, t_surf.get_rect(center=(card_rect.centerx, card_rect.centery - 10)))
             f_sub = FontManager.get_font(10, bold=False)
             recipe_display = self.train_recipe.upper().replace("_", " ")
@@ -1997,9 +2134,9 @@ class OvercookedApp:
             fraction = max(0.0, min(1.0, self.train_progress_cur / max(1, self.train_progress_total)))
             pct = int(round(fraction * 100))
             pb_lbl = f"Progress Bar: {self.train_progress_cur}/{self.train_progress_total} ({pct}%)"
-            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 180))
+            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 172))
 
-            pb_rect = pygame.Rect(sb_x, 204, sb_w, 36)
+            pb_rect = pygame.Rect(sb_x, 194, sb_w, 32)
             pygame.draw.rect(self.window, SHADOW_BLACK, pb_rect.move(2, 2))
             pygame.draw.rect(self.window, (255, 255, 255), pb_rect)
 
@@ -2013,12 +2150,17 @@ class OvercookedApp:
             pygame.draw.rect(self.window, BORDER_BLACK, pb_rect, width=2)
 
             eta_lbl = f"Estimated Time: {self.train_eta_str}"
-            self.window.blit(f_lbl.render(eta_lbl, True, TEXT_PRIMARY), (sb_x, 252))
+            self.window.blit(f_lbl.render(eta_lbl, True, TEXT_PRIMARY), (sb_x, 236))
 
+            rew_lbl = f"Mean Reward: {self.train_reward_mean:+.2f}"
+            self.window.blit(f_lbl.render(rew_lbl, True, TEXT_PRIMARY), (sb_x, 258))
+
+            self.btn_view_training_live.draw(self.window)
             self.btn_pause_training.draw(self.window)
+            self.btn_stop_training.draw(self.window)
 
             # Recipe Info Card on the bottom of the active menu
-            active_info_y = min(400, self.window_height - 38 - 88 - 8)
+            active_info_y = min(374, self.window_height - 38 - 88 - 8)
             self._draw_recipe_info_card(sb_x, sb_w, active_info_y)
 
             self.btn_view_all_agents.draw(self.window)
@@ -2143,6 +2285,18 @@ class OvercookedApp:
             if self.streamlit_proc is not None:
                 try:
                     self.streamlit_proc.terminate()
+                except Exception:
+                    pass
+            if self.train_process is not None and self.train_process.poll() is None:
+                try:
+                    if getattr(self, "train_is_paused", False):
+                        os.kill(self.train_process.pid, signal.SIGCONT)
+                    self.train_process.terminate()
+                except Exception:
+                    pass
+            if hasattr(self, "train_log_file") and self.train_log_file is not None:
+                try:
+                    self.train_log_file.close()
                 except Exception:
                     pass
             print("[GUI] Closed cleanly.")

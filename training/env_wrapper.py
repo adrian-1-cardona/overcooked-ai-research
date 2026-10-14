@@ -55,15 +55,43 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
         self.greedy_observation_space = gymnasium.spaces.Box(
             low=-1.0, high=1.0, shape=(1,), dtype=np.float32
         )
+        all_possible_agents = [
+            "ppo_0", "ppo_1", "greedy_0", "greedy_1", "bc_0", "bc_1", "random_0", "random_1"
+        ]
         ob_space = {}
-        for agent in agents:
-            if agent.startswith("ppo"):
-                ob_space[agent] = self.ppo_observation_space
-            elif agent.startswith("bc"):
-                ob_space[agent] = self.bc_observation_space
+        for a in all_possible_agents:
+            if a.startswith("ppo"):
+                ob_space[a] = self.ppo_observation_space
+            elif a.startswith("bc"):
+                ob_space[a] = self.bc_observation_space
             else:
-                ob_space[agent] = self.greedy_observation_space
+                ob_space[a] = self.greedy_observation_space
         self.observation_space = gymnasium.spaces.Dict(ob_space)
+
+    def _setup_action_space(self, agents: list[str]) -> None:
+        super()._setup_action_space(agents)
+        all_possible_agents = [
+            "ppo_0", "ppo_1", "greedy_0", "greedy_1", "bc_0", "bc_1", "random_0", "random_1"
+        ]
+        action_sp = {
+            a: gymnasium.spaces.Discrete(len(Action.ALL_ACTIONS))
+            for a in all_possible_agents
+        }
+        self.action_space = gymnasium.spaces.Dict(action_sp)
+        self.shared_action_space = gymnasium.spaces.Discrete(len(Action.ALL_ACTIONS))
+
+    def observation_space_sample(self, agent_ids: list[str] | None = None) -> dict[str, Any]:
+        if agent_ids is None:
+            agent_ids = self.curr_agents
+        obs = {}
+        for a in agent_ids:
+            if a.startswith("ppo"):
+                obs[a] = self.ppo_observation_space.sample()
+            elif a.startswith("bc"):
+                obs[a] = self.bc_observation_space.sample()
+            else:
+                obs[a] = self.greedy_observation_space.sample()
+        return obs
 
     def _get_featurize_fn(self, agent_id: str) -> Any:
         if agent_id.startswith("ppo"):
