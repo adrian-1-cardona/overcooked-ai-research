@@ -1,5 +1,5 @@
 """
-Streamlit dashboard for visualising telemetry run CSVs from render.py
+Streamlit dashboard for visualising telemetry run CSVs from runover.py
 (e.g., results/last_render_run.csv or any recorded gameplay CSV).
 
 Features:
