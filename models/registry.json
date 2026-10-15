@@ -1,43 +1,30 @@
 [
   {
-    "id": "PPO_HumanModel",
-    "name": "PPO_HumanModel",
+    "id": "ppo_v_greedy",
+    "name": "ppo_v_greedy",
     "date_trained": "10/15/2026",
-    "time_trained": "10:38",
-    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/PPO_HumanModel",
+    "time_trained": "11:11",
+    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_v_greedy",
     "layout": "cramped_room",
     "recipe": "ppo_custom",
-    "agent_1": "ppo",
-    "agent_1_pct": 50,
-    "agent_2": "bc",
-    "agent_2_pct": 50,
-    "reward_mean": 314.89
-  },
-  {
-    "id": "PPO_SelfPlay",
-    "name": "PPO_SelfPlay",
-    "date_trained": "10/15/2026",
-    "time_trained": "10:05",
-    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/PPO_SelfPlay",
-    "layout": "cramped_room",
-    "recipe": "ppo_custom",
-    "agent_1": "ppo",
-    "agent_1_pct": 100,
-    "agent_2": "ppo",
-    "agent_2_pct": 0,
-    "reward_mean": 561.16
-  },
-  {
-    "id": "jeff_20261014_100822",
-    "name": "Jeff",
-    "layout": "cramped_room",
-    "date_trained": "10/14/2026",
-    "time_trained": "10:48",
     "agent_1": "ppo",
     "agent_1_pct": 50,
     "agent_2": "greedy",
     "agent_2_pct": 50,
-    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/Jeff",
-    "reward_mean": 12.0
+    "reward_mean": 243.21
+  },
+  {
+    "id": "ppo_greedy",
+    "name": "ppo_greedy",
+    "date_trained": "10/15/2026",
+    "time_trained": "10:57",
+    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_greedy",
+    "layout": "cramped_room",
+    "recipe": "ppo_custom",
+    "agent_1": "ppo",
+    "agent_1_pct": 0,
+    "agent_2": "greedy",
+    "agent_2_pct": 100,
+    "reward_mean": 255.69
   }
 ]

@@ -1,0 +1,10 @@
+{
+  "recipe": "ppo_50_50",
+  "layout_name": "cramped_room",
+  "partner_type": "greedy",
+  "partner_prob": 0.5,
+  "current_iter": 500,
+  "total_iters": 500,
+  "reward_mean": 243.21,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_v_greedy/checkpoint_000500"
+}

@@ -199,10 +199,11 @@ class OvercookedApp:
         self.train_last_trained_name = "Jeff"
         self.train_process: subprocess.Popen[Any] | None = None
         self.train_progress_cur = 0
-        self.train_progress_total = 100
-        self.train_eta_seconds = 2400
+        self.train_progress_total = 500
+        self.train_iters = 500
+        self.train_eta_seconds = 1000
         self.train_last_poll_time = 0.0
-        self.train_eta_str = "0hr 40min"
+        self.train_eta_str = "16min 40s"
         self.train_reward_mean = 0.0
         self.train_is_paused = False
         self.train_log_file: Any | None = None
@@ -822,7 +823,7 @@ class OvercookedApp:
             "--partner-type", partner_type,
             "--partner-prob", str(partner_prob),
             "--layout", self.current_layout,
-            "--iters", "100",
+            "--iters", str(getattr(self, "train_iters", 500)),
             "--out-dir", str(out_dir),
         ]
         status_file = REPO_ROOT / "results" / "training_status.json"
@@ -859,8 +860,9 @@ class OvercookedApp:
         self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
         self.train_view = "active"
         self.train_progress_cur = 0
-        self.train_progress_total = 100
-        initial_eta = 100 * 2  # Baseline estimate (~2s per iteration with 4 rollout workers)
+        total_it = getattr(self, "train_iters", 500)
+        self.train_progress_total = total_it
+        initial_eta = total_it * 2  # Baseline estimate (~2s per iteration with 4 rollout workers)
         self.train_eta_seconds = initial_eta
         self.train_eta_str = self._format_eta(initial_eta)
         self.train_last_poll_time = time.time()
@@ -960,7 +962,7 @@ class OvercookedApp:
                     data = json.load(f)
 
                 self.train_progress_cur = data.get("current_iter", 0)
-                self.train_progress_total = data.get("total_iters", 100)
+                self.train_progress_total = data.get("total_iters", getattr(self, "train_iters", 500))
                 self.train_reward_mean = data.get("reward_mean", 0.0)
 
                 eta_sec = data.get("eta_seconds", None)
@@ -970,7 +972,7 @@ class OvercookedApp:
 
                 if data.get("status") == "completed" or (self.train_process and self.train_process.poll() == 0):
                     self.train_eta_seconds = 0
-                    self.train_eta_str = "0hr 0min"
+                    self.train_eta_str = "0s"
                     model_dir = REPO_ROOT / "models" / self.train_last_trained_name
                     AgentDatabase.add_agent(
                         name=self.train_last_trained_name,
