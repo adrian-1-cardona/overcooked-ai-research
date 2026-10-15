@@ -1,0 +1,10 @@
+{
+  "recipe": "greedy",
+  "layout_name": "asymmetric_advantages",
+  "partner_type": "greedy",
+  "partner_prob": 1.0,
+  "current_iter": 100,
+  "total_iters": 100,
+  "reward_mean": 292.96,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_greedy/asymmetric_advantages/checkpoint_000100"
+}

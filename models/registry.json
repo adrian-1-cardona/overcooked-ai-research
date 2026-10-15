@@ -3,28 +3,28 @@
     "id": "ppo_v_greedy",
     "name": "ppo_v_greedy",
     "date_trained": "10/15/2026",
-    "time_trained": "11:11",
+    "time_trained": "13:35",
     "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_v_greedy",
-    "layout": "cramped_room",
-    "recipe": "ppo_custom",
+    "layout": "all_layouts",
+    "recipe": "ppo_50_50",
     "agent_1": "ppo",
     "agent_1_pct": 50,
     "agent_2": "greedy",
     "agent_2_pct": 50,
-    "reward_mean": 243.21
+    "reward_mean": 41.0
   },
   {
     "id": "ppo_greedy",
     "name": "ppo_greedy",
     "date_trained": "10/15/2026",
-    "time_trained": "10:57",
+    "time_trained": "12:37",
     "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_greedy",
-    "layout": "cramped_room",
-    "recipe": "ppo_custom",
+    "layout": "all_layouts",
+    "recipe": "greedy",
     "agent_1": "ppo",
     "agent_1_pct": 0,
     "agent_2": "greedy",
     "agent_2_pct": 100,
-    "reward_mean": 255.69
+    "reward_mean": 121.22
   }
 ]

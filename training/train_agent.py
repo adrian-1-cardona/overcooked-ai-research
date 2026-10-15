@@ -229,7 +229,18 @@ def build_trainer(
     }
 
 
-def train(
+BENCHMARK_LAYOUTS = [
+    "cramped_room",
+    "asymmetric_advantages",
+    "coordination_ring",
+    "forced_coordination",
+    "counter_circuit_o_1order",
+]
+
+import subprocess
+
+
+def train_single_layout(
     recipe: str = "ppo_greedy",
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
@@ -238,8 +249,11 @@ def train(
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
+    layout_index: int | None = None,
+    total_layouts: int | None = None,
+    multi_layout_parent: str | Path | None = None,
 ) -> Path:
-    """Execute training run."""
+    """Execute training run for a single layout."""
     print("=" * 60)
     print(f"STARTING TRAINING PIPELINE: {recipe.upper()}")
     print(f"  Layout: {layout_name}")
@@ -247,40 +261,50 @@ def train(
     print(f"  Partner Prob: {partner_prob}")
     print(f"  Iterations: {num_iters}")
     print(f"  Workers: {num_workers}")
+    if layout_index and total_layouts:
+        print(f"  Multi-Layout Mode: Step {layout_index}/{total_layouts}")
     print("=" * 60)
 
     save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_{layout_name}"
     save_path.mkdir(parents=True, exist_ok=True)
 
-    initial_eta = int(num_iters * 24.0)
+    is_multi = layout_index is not None and total_layouts is not None
+    overall_total_iters = (total_layouts * num_iters) if is_multi else num_iters
+    initial_eta = overall_total_iters * 2
+
+    status_layout = "all_layouts" if is_multi else layout_name
+    curr_overall = ((layout_index - 1) * num_iters) if is_multi else 0
+
     update_status({
         "status": "initializing",
         "recipe": recipe,
-        "layout": layout_name,
-        "current_iter": 0,
-        "total_iters": num_iters,
+        "layout": status_layout,
+        "current_layout": layout_name,
+        "current_iter": curr_overall,
+        "total_iters": overall_total_iters,
         "reward_mean": 0.0,
-        "percent": 0.0,
+        "percent": round((curr_overall / max(1, overall_total_iters)) * 100.0, 1),
         "eta_seconds": initial_eta,
     })
 
     if dry_run:
-        print("[Dry Run] Verifying trainer initialization only...")
+        print(f"[Dry Run] Verifying trainer initialization for {layout_name}...")
         trainer, meta = build_trainer(
             recipe=recipe,
             layout_name=layout_name,
             partner_type=partner_type,
             partner_prob=partner_prob,
-            num_workers=0,  # 0 workers for fast local probe
+            num_workers=0,
             out_dir=save_path,
         )
-        print("[Dry Run] Trainer initialized successfully! Dry run passed.")
+        print(f"[Dry Run] Trainer for {layout_name} passed!")
         update_status({
             "status": "ready",
             "recipe": recipe,
-            "layout": layout_name,
-            "current_iter": 0,
-            "total_iters": num_iters,
+            "layout": status_layout,
+            "current_layout": layout_name,
+            "current_iter": curr_overall,
+            "total_iters": overall_total_iters,
             "reward_mean": 0.0,
             "percent": 0.0,
             "eta_seconds": 0,
@@ -306,31 +330,58 @@ def train(
         iter_time = time.time() - iter_start
         iter_durations.append(iter_time)
 
-        # Rolling window over last 5 iterations so graph compilation does not skew ETA
         window = iter_durations[-5:] if len(iter_durations) >= 5 else iter_durations
         avg_iter_time = sum(window) / len(window)
-        remaining_iters = num_iters - iteration
-        eta_seconds = max(0, int(remaining_iters * avg_iter_time))
 
-        pct = round((iteration / num_iters) * 100.0, 1)
-        print(f"[{iteration:03d}/{num_iters:03d}] {pct}% | Reward: {reward_mean:.2f} | ETA: {eta_seconds}s ({avg_iter_time:.1f}s/iter)")
+        if is_multi:
+            overall_current_iter = (layout_index - 1) * num_iters + iteration
+            overall_remaining_iters = overall_total_iters - overall_current_iter
+            eta_seconds = max(0, int(overall_remaining_iters * avg_iter_time))
+            pct = round((overall_current_iter / overall_total_iters) * 100.0, 1)
 
-        update_status({
-            "status": "training",
-            "recipe": recipe,
-            "layout": layout_name,
-            "current_iter": iteration,
-            "total_iters": num_iters,
-            "reward_mean": round(float(reward_mean), 2),
-            "percent": pct,
-            "eta_seconds": eta_seconds,
-        })
+            print(
+                f"[{layout_name} {iteration:03d}/{num_iters:03d}] "
+                f"Overall: {overall_current_iter:03d}/{overall_total_iters:03d} ({pct}%) | "
+                f"Reward: {reward_mean:.2f} | ETA: {eta_seconds}s ({avg_iter_time:.1f}s/iter)"
+            )
 
-    # Save final checkpoint
+            update_status({
+                "status": "training",
+                "recipe": recipe,
+                "layout": "all_layouts",
+                "current_layout": layout_name,
+                "layout_index": layout_index,
+                "total_layouts": total_layouts,
+                "current_iter": overall_current_iter,
+                "total_iters": overall_total_iters,
+                "layout_iter": iteration,
+                "layout_total_iters": num_iters,
+                "reward_mean": round(float(reward_mean), 2),
+                "percent": pct,
+                "eta_seconds": eta_seconds,
+            })
+        else:
+            remaining_iters = num_iters - iteration
+            eta_seconds = max(0, int(remaining_iters * avg_iter_time))
+            pct = round((iteration / num_iters) * 100.0, 1)
+
+            print(f"[{iteration:03d}/{num_iters:03d}] {pct}% | Reward: {reward_mean:.2f} | ETA: {eta_seconds}s ({avg_iter_time:.1f}s/iter)")
+
+            update_status({
+                "status": "training",
+                "recipe": recipe,
+                "layout": layout_name,
+                "current_iter": iteration,
+                "total_iters": num_iters,
+                "reward_mean": round(float(reward_mean), 2),
+                "percent": pct,
+                "eta_seconds": eta_seconds,
+            })
+
+    # Save final checkpoint for this layout
     checkpoint_dir = trainer.save(str(save_path))
-    print(f"\nTraining complete! Checkpoint saved to: {checkpoint_dir}")
+    print(f"\nLayout {layout_name} training complete! Checkpoint saved to: {checkpoint_dir}")
 
-    # Persist metadata for custom agent loading in GUI and benchmarks
     meta = {
         "recipe": recipe,
         "layout_name": layout_name,
@@ -344,19 +395,185 @@ def train(
     with open(save_path / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
+    if not is_multi:
+        update_status({
+            "status": "completed",
+            "recipe": recipe,
+            "layout": layout_name,
+            "current_iter": num_iters,
+            "total_iters": num_iters,
+            "reward_mean": round(float(reward_mean), 2),
+            "percent": 100.0,
+            "eta_seconds": 0,
+            "checkpoint_dir": str(checkpoint_dir),
+        })
+
+    if ray.is_initialized():
+        ray.shutdown()
+
+    return Path(checkpoint_dir)
+
+
+def train_multi_layout(
+    recipe: str = "ppo_greedy",
+    partner_type: str = "greedy",
+    partner_prob: float | None = None,
+    num_iters: int = 100,
+    num_workers: int = 4,
+    out_dir: str | Path | None = None,
+    dry_run: bool = False,
+) -> Path:
+    """Train an agent across all 5 benchmark layouts sequentially in clean processes."""
+    save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_all_layouts"
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    layouts = BENCHMARK_LAYOUTS
+    total_layouts = len(layouts)
+    overall_total_iters = total_layouts * num_iters
+    reward_means: dict[str, float] = {}
+
+    initial_eta = overall_total_iters * 2
+    update_status({
+        "status": "training",
+        "recipe": recipe,
+        "layout": "all_layouts",
+        "current_layout": layouts[0],
+        "layout_index": 1,
+        "total_layouts": total_layouts,
+        "current_iter": 0,
+        "total_iters": overall_total_iters,
+        "reward_mean": 0.0,
+        "percent": 0.0,
+        "eta_seconds": initial_eta,
+    })
+
+    if dry_run:
+        print("[Dry Run] Verifying multi-layout pipeline for all 5 layouts...")
+        for l in layouts:
+            train_single_layout(
+                recipe=recipe,
+                layout_name=l,
+                partner_type=partner_type,
+                partner_prob=partner_prob,
+                num_iters=1,
+                num_workers=0,
+                out_dir=save_path / l,
+                dry_run=True,
+                layout_index=1,
+                total_layouts=total_layouts,
+            )
+        print("[Dry Run] Multi-layout dry run passed successfully!")
+        return save_path
+
+    for l_idx, target_layout in enumerate(layouts, 1):
+        print("\n" + "=" * 60)
+        print(f"[{l_idx}/{total_layouts}] TRAINING BENCHMARK LAYOUT: {target_layout}")
+        print("=" * 60)
+
+        layout_out_dir = save_path / target_layout
+        venv_python = REPO_ROOT / "overcooked-agent-eval" / ".venv" / "bin" / "python"
+        python_bin = str(venv_python) if venv_python.is_file() else sys.executable
+        cmd = [
+            python_bin,
+            "-u",
+            "-m", "training.train_agent",
+            "--recipe", recipe,
+            "--partner-type", partner_type,
+            *(["--partner-prob", str(partner_prob)] if partner_prob is not None else []),
+            "--layout", target_layout,
+            "--iters", str(num_iters),
+            "--num-workers", str(num_workers),
+            "--out-dir", str(layout_out_dir),
+            "--layout-index", str(l_idx),
+            "--total-layouts", str(total_layouts),
+            "--multi-layout-parent", str(save_path),
+        ]
+        subprocess.run(cmd, cwd=str(REPO_ROOT), check=True)
+
+        meta_file = layout_out_dir / "metadata.json"
+        if meta_file.is_file():
+            with open(meta_file, "r", encoding="utf-8") as f:
+                reward_means[target_layout] = json.load(f).get("reward_mean", 0.0)
+        else:
+            reward_means[target_layout] = 0.0
+
+    overall_avg_reward = round(sum(reward_means.values()) / max(1, len(reward_means)), 2)
+
+    root_meta = {
+        "recipe": recipe,
+        "layout_name": "all_layouts",
+        "layouts": layouts,
+        "partner_type": partner_type,
+        "partner_prob": partner_prob,
+        "current_iter": overall_total_iters,
+        "total_iters": overall_total_iters,
+        "reward_mean": overall_avg_reward,
+        "reward_means": reward_means,
+        "checkpoint_dir": str(save_path),
+    }
+    with open(save_path / "metadata.json", "w", encoding="utf-8") as f:
+        json.dump(root_meta, f, indent=2)
+
     update_status({
         "status": "completed",
         "recipe": recipe,
-        "layout": layout_name,
-        "current_iter": num_iters,
-        "total_iters": num_iters,
-        "reward_mean": round(float(reward_mean), 2),
+        "layout": "all_layouts",
+        "current_layout": "all_layouts",
+        "current_iter": overall_total_iters,
+        "total_iters": overall_total_iters,
+        "reward_mean": overall_avg_reward,
         "percent": 100.0,
         "eta_seconds": 0,
-        "checkpoint_dir": str(checkpoint_dir),
+        "checkpoint_dir": str(save_path),
     })
 
-    return Path(checkpoint_dir)
+    print("\n" + "=" * 60)
+    print(f"ALL-MAPS TRAINING COMPLETE FOR {recipe.upper()}!")
+    print(f"Average Reward Across 5 Layouts: {overall_avg_reward:+.2f}")
+    print(f"Per-Layout Rewards: {reward_means}")
+    print(f"Checkpoints Saved To: {save_path}")
+    print("=" * 60)
+
+    return save_path
+
+
+def train(
+    recipe: str = "ppo_greedy",
+    layout_name: str = "cramped_room",
+    partner_type: str = "greedy",
+    partner_prob: float | None = None,
+    num_iters: int = 100,
+    num_workers: int = 4,
+    out_dir: str | Path | None = None,
+    dry_run: bool = False,
+    layout_index: int | None = None,
+    total_layouts: int | None = None,
+    multi_layout_parent: str | Path | None = None,
+) -> Path:
+    """Execute training run supporting single-layout or all-maps training."""
+    if layout_name in ("all", "all_layouts", "all_maps"):
+        return train_multi_layout(
+            recipe=recipe,
+            partner_type=partner_type,
+            partner_prob=partner_prob,
+            num_iters=num_iters,
+            num_workers=num_workers,
+            out_dir=out_dir,
+            dry_run=dry_run,
+        )
+    return train_single_layout(
+        recipe=recipe,
+        layout_name=layout_name,
+        partner_type=partner_type,
+        partner_prob=partner_prob,
+        num_iters=num_iters,
+        num_workers=num_workers,
+        out_dir=out_dir,
+        dry_run=dry_run,
+        layout_index=layout_index,
+        total_layouts=total_layouts,
+        multi_layout_parent=multi_layout_parent,
+    )
 
 
 def main() -> None:
@@ -385,7 +602,7 @@ def main() -> None:
         "--layout",
         type=str,
         default="cramped_room",
-        help="Layout name (default: cramped_room)",
+        help="Layout name (default: cramped_room, or 'all_layouts' for all benchmark maps)",
     )
     parser.add_argument(
         "--iters",
@@ -410,6 +627,24 @@ def main() -> None:
         action="store_true",
         help="Initialize and verify trainer without running full training iterations.",
     )
+    parser.add_argument(
+        "--layout-index",
+        type=int,
+        default=None,
+        help="Layout index when running in multi-layout mode.",
+    )
+    parser.add_argument(
+        "--total-layouts",
+        type=int,
+        default=None,
+        help="Total number of layouts in multi-layout mode.",
+    )
+    parser.add_argument(
+        "--multi-layout-parent",
+        type=str,
+        default=None,
+        help="Parent directory for multi-layout run.",
+    )
     args = parser.parse_args()
 
     train(
@@ -421,6 +656,9 @@ def main() -> None:
         num_workers=args.num_workers,
         out_dir=args.out_dir,
         dry_run=args.dry_run,
+        layout_index=args.layout_index,
+        total_layouts=args.total_layouts,
+        multi_layout_parent=args.multi_layout_parent,
     )
 
 

@@ -190,6 +190,8 @@ class OvercookedApp:
 
         # Training Mode State
         self.train_view = "setup"  # "setup", "active", "complete", "db"
+        self.train_layout = "all_layouts"
+        self.train_current_layout = "all_layouts"
         self.train_recipe = "custom"
         self.train_agent_1 = "ppo"
         self.train_agent_1_pct = 50
@@ -200,7 +202,7 @@ class OvercookedApp:
         self.train_process: subprocess.Popen[Any] | None = None
         self.train_progress_cur = 0
         self.train_progress_total = 500
-        self.train_iters = 500
+        self.train_iters = 100
         self.train_eta_seconds = 1000
         self.train_last_poll_time = 0.0
         self.train_eta_str = "16min 40s"
@@ -560,6 +562,21 @@ class OvercookedApp:
             ("Greedy Chef", "greedy"),
             ("Random Chef", "random"),
         ]
+        train_layout_opts = [
+            ("All Maps", "all_layouts"),
+            ("Cramped Room", "cramped_room"),
+            ("Asymmetric Advantages", "asymmetric_advantages"),
+            ("Coordination Ring", "coordination_ring"),
+            ("Forced Coordination", "forced_coordination"),
+            ("Counter Circuit", "counter_circuit_o_1order"),
+        ]
+        self.dropdown_train_layout = UIDropdown(
+            rect=(sb_x, 96, sb_w, 28),
+            options=train_layout_opts,
+            selected_value=self.train_layout,
+            on_change=self._on_train_layout_changed,
+        )
+
         recipe_opts = [
             ("PPO (Standard)", "ppo"),
             ("PPO-SP (Self-Play)", "ppo_sp"),
@@ -569,19 +586,19 @@ class OvercookedApp:
             ("Custom Blend (Sliders)", "custom"),
         ]
         self.dropdown_train_recipe = UIDropdown(
-            rect=(sb_x, 104, sb_w, 30),
+            rect=(sb_x, 148, sb_w, 28),
             options=recipe_opts,
             selected_value=self.train_recipe,
             on_change=self._on_recipe_changed,
         )
         self.dropdown_train_agent_1 = UIDropdown(
-            rect=(sb_x, 158, sb_w, 30),
+            rect=(sb_x, 200, sb_w, 28),
             options=train_agent_opts,
             selected_value=self.train_agent_1,
             on_change=self._on_train_agent_1_changed,
         )
         self.slider_agent_1 = UISlider(
-            rect=(sb_x, 212, sb_w, 20),
+            rect=(sb_x, 248, sb_w, 18),
             value=self.train_agent_1_pct,
             min_val=0,
             max_val=100,
@@ -589,13 +606,13 @@ class OvercookedApp:
             on_change=self._on_slider_1_changed,
         )
         self.dropdown_train_agent_2 = UIDropdown(
-            rect=(sb_x, 274, sb_w, 30),
+            rect=(sb_x, 290, sb_w, 28),
             options=train_agent_opts,
             selected_value=self.train_agent_2,
             on_change=self._on_train_agent_2_changed,
         )
         self.slider_agent_2 = UISlider(
-            rect=(sb_x, 328, sb_w, 20),
+            rect=(sb_x, 338, sb_w, 18),
             value=self.train_agent_2_pct,
             min_val=0,
             max_val=100,
@@ -603,13 +620,13 @@ class OvercookedApp:
             on_change=self._on_slider_2_changed,
         )
         self.input_agent_name = UITextInput(
-            rect=(sb_x, 392, sb_w, 30),
+            rect=(sb_x, 380, sb_w, 28),
             text="Jeff",
             placeholder="Agent Name",
             on_change=lambda t: setattr(self, "train_agent_name", t),
         )
         self.btn_train_start = UIButton(
-            rect=(sb_x, 434, sb_w, 42),
+            rect=(sb_x, 418, sb_w, 38),
             text="TRAIN",
             on_click=self._start_training,
             bg_color=COLOR_RUN,
@@ -684,6 +701,11 @@ class OvercookedApp:
             on_click=lambda: setattr(self, "train_view", "setup"),
             font_size=12,
         )
+
+    def _on_train_layout_changed(self, new_layout: str) -> None:
+        self.train_layout = new_layout
+        if new_layout != "all_layouts" and new_layout in self.available_layouts:
+            self._load_environment(new_layout)
 
     def _on_recipe_changed(self, new_recipe: str) -> None:
         self.train_recipe = new_recipe
@@ -815,6 +837,8 @@ class OvercookedApp:
         out_dir = REPO_ROOT / "models" / agent_name
         venv_python = AGENT_EVAL_DIR / ".venv" / "bin" / "python"
         python_bin = str(venv_python) if venv_python.is_file() else sys.executable
+        iters_per_layout = getattr(self, "train_iters", 100)
+        target_layout = getattr(self, "train_layout", "all_layouts")
         cmd = [
             python_bin,
             "-u",
@@ -822,8 +846,8 @@ class OvercookedApp:
             "--recipe", recipe,
             "--partner-type", partner_type,
             "--partner-prob", str(partner_prob),
-            "--layout", self.current_layout,
-            "--iters", str(getattr(self, "train_iters", 500)),
+            "--layout", target_layout,
+            "--iters", str(iters_per_layout),
             "--out-dir", str(out_dir),
         ]
         status_file = REPO_ROOT / "results" / "training_status.json"
@@ -860,7 +884,10 @@ class OvercookedApp:
         self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
         self.train_view = "active"
         self.train_progress_cur = 0
-        total_it = getattr(self, "train_iters", 500)
+        if target_layout in ("all", "all_layouts", "all_maps"):
+            total_it = 5 * iters_per_layout
+        else:
+            total_it = iters_per_layout
         self.train_progress_total = total_it
         initial_eta = total_it * 2  # Baseline estimate (~2s per iteration with 4 rollout workers)
         self.train_eta_seconds = initial_eta
@@ -962,8 +989,9 @@ class OvercookedApp:
                     data = json.load(f)
 
                 self.train_progress_cur = data.get("current_iter", 0)
-                self.train_progress_total = data.get("total_iters", getattr(self, "train_iters", 500))
+                self.train_progress_total = data.get("total_iters", getattr(self, "train_progress_total", 500))
                 self.train_reward_mean = data.get("reward_mean", 0.0)
+                self.train_current_layout = data.get("current_layout", self.train_layout)
 
                 eta_sec = data.get("eta_seconds", None)
                 if eta_sec is not None:
@@ -974,9 +1002,10 @@ class OvercookedApp:
                     self.train_eta_seconds = 0
                     self.train_eta_str = "0s"
                     model_dir = REPO_ROOT / "models" / self.train_last_trained_name
+                    registered_layout = data.get("layout", getattr(self, "train_layout", "all_layouts"))
                     AgentDatabase.add_agent(
                         name=self.train_last_trained_name,
-                        layout=self.current_layout,
+                        layout=registered_layout,
                         checkpoint_path=model_dir,
                         agent_1=self.train_agent_1,
                         agent_1_pct=self.train_agent_1_pct,
@@ -1596,7 +1625,12 @@ class OvercookedApp:
 
     def _handle_train_events(self, event: pygame.event.Event) -> None:
         if self.train_view == "setup":
-            dropdowns = [self.dropdown_train_recipe, self.dropdown_train_agent_1, self.dropdown_train_agent_2]
+            dropdowns = [
+                self.dropdown_train_layout,
+                self.dropdown_train_recipe,
+                self.dropdown_train_agent_1,
+                self.dropdown_train_agent_2,
+            ]
             open_dd = next((dd for dd in dropdowns if dd.is_open), None)
             if open_dd is not None:
                 if open_dd.handle_event(event):
@@ -1692,13 +1726,18 @@ class OvercookedApp:
                     banner_w = min(480, self.game_pane_width - 40)
                     banner_rect = pygame.Rect((self.game_pane_width - banner_w) // 2, 16, banner_w, 32)
                     if self.train_view == "active":
-                        b_text = f"TRAINING: {self.train_last_trained_name} ({self.train_progress_cur}/{self.train_progress_total})"
+                        cur_l = getattr(self, "train_current_layout", self.train_layout)
+                        if self.train_layout in ("all", "all_layouts", "all_maps"):
+                            b_text = f"TRAINING: {self.train_last_trained_name.upper()} [ALL MAPS: {cur_l.upper()}] ({self.train_progress_cur}/{self.train_progress_total})"
+                        else:
+                            b_text = f"TRAINING: {self.train_last_trained_name.upper()} ({self.train_progress_cur}/{self.train_progress_total})"
                         UIBanner.draw(self.window, banner_rect, b_text, bg_color=(254, 226, 226), text_color=(220, 38, 38), font_size=12, bold=True)
                     elif self.train_view == "complete":
-                        b_text = f"TRAINED: {self.train_last_trained_name} READY TO TEST"
+                        b_text = f"TRAINED: {self.train_last_trained_name.upper()} READY TO TEST"
                         UIBanner.draw(self.window, banner_rect, b_text, bg_color=(220, 252, 231), text_color=(22, 101, 52), font_size=12, bold=True)
                     else:
-                        b_text = f"TRAINING TARGET: {self.current_layout.upper()}"
+                        tgt = "ALL 5 BENCHMARK MAPS" if self.train_layout in ("all", "all_layouts", "all_maps") else self.train_layout.upper()
+                        b_text = f"TRAINING TARGET: {tgt}"
                         UIBanner.draw(self.window, banner_rect, b_text, bg_color=BG_CARD_ALT, text_color=TEXT_PRIMARY, font_size=12, bold=True)
 
         elif self.active_mode == "matrix":
@@ -2094,37 +2133,41 @@ class OvercookedApp:
         f_title = FontManager.get_font(14, bold=True)
 
         if self.train_view == "setup":
-            # Image 4: Setup View with Recipe Selector
-            self.window.blit(f_sec.render("agent type / recipe:", True, TEXT_PRIMARY), (sb_x, 86))
+            # Training layout selector
+            self.window.blit(f_sec.render("training layout / map:", True, TEXT_PRIMARY), (sb_x, 80))
+            self.dropdown_train_layout.draw(self.window)
+
+            # Recipe Selector
+            self.window.blit(f_sec.render("agent type / recipe:", True, TEXT_PRIMARY), (sb_x, 132))
             self.dropdown_train_recipe.draw(self.window)
 
             # Select Agent 1
-            self.window.blit(f_sec.render("select agent 1:", True, TEXT_PRIMARY), (sb_x, 142))
+            self.window.blit(f_sec.render("select agent 1:", True, TEXT_PRIMARY), (sb_x, 184))
             self.dropdown_train_agent_1.draw(self.window)
 
             # Slider 1
             s1_lbl = f"*Drag to the desired amount: {self.train_agent_1_pct}%"
-            self.window.blit(f_lbl.render(s1_lbl, True, TEXT_MUTED), (sb_x, 196))
+            self.window.blit(f_lbl.render(s1_lbl, True, TEXT_MUTED), (sb_x, 234))
             self.slider_agent_1.draw(self.window)
 
             # Select Agent 2
-            self.window.blit(f_sec.render("select agent 2:", True, TEXT_PRIMARY), (sb_x, 258))
+            self.window.blit(f_sec.render("select agent 2:", True, TEXT_PRIMARY), (sb_x, 274))
             self.dropdown_train_agent_2.draw(self.window)
 
             # Slider 2
             s2_lbl = f"*Drag to the desired amount: {self.train_agent_2_pct}%"
-            self.window.blit(f_lbl.render(s2_lbl, True, TEXT_MUTED), (sb_x, 312))
+            self.window.blit(f_lbl.render(s2_lbl, True, TEXT_MUTED), (sb_x, 324))
             self.slider_agent_2.draw(self.window)
 
             # Name Agent
-            self.window.blit(f_sec.render("name agent:", True, TEXT_PRIMARY), (sb_x, 374))
+            self.window.blit(f_sec.render("name agent:", True, TEXT_PRIMARY), (sb_x, 364))
             self.input_agent_name.draw(self.window)
 
             # Train Button
             self.btn_train_start.draw(self.window)
 
             # Recipe Info Card on the bottom of the menu
-            card_y = min(488, self.window_height - 38 - 88 - 8)
+            card_y = min(464, self.window_height - 38 - 88 - 8)
             self._draw_recipe_info_card(sb_x, sb_w, card_y)
 
             # View All Agents link button
@@ -2139,7 +2182,12 @@ class OvercookedApp:
             self.window.blit(t_surf, t_surf.get_rect(center=(card_rect.centerx, card_rect.centery - 10)))
             f_sub = FontManager.get_font(10, bold=False)
             recipe_display = self.train_recipe.upper().replace("_", " ")
-            r_surf = f_sub.render(f"Recipe: {recipe_display}", True, TEXT_MUTED)
+            cur_l = getattr(self, "train_current_layout", self.train_layout)
+            if self.train_layout in ("all", "all_layouts", "all_maps"):
+                layout_display = f"ALL MAPS ({cur_l.upper()})"
+            else:
+                layout_display = cur_l.upper()
+            r_surf = f_sub.render(f"Recipe: {recipe_display} | Map: {layout_display}", True, TEXT_MUTED)
             self.window.blit(r_surf, r_surf.get_rect(center=(card_rect.centerx, card_rect.centery + 14)))
 
             fraction = max(0.0, min(1.0, self.train_progress_cur / max(1, self.train_progress_total)))

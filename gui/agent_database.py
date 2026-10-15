@@ -41,18 +41,34 @@ class AgentDatabase:
         for p in sorted(MODELS_DIR.iterdir()):
             if not p.is_dir() or p.name.startswith("."):
                 continue
-            has_checkpoint = any(p.glob("checkpoint_*")) or (p / "config.pkl").is_file()
+            has_checkpoint = (
+                any(p.glob("checkpoint_*"))
+                or any(p.rglob("checkpoint_*"))
+                or (p / "config.pkl").is_file()
+                or (p / "metadata.json").is_file()
+            )
             resolved = str(p.resolve())
             if has_checkpoint and resolved not in existing_paths and p.name not in existing_ids:
                 mtime = datetime.fromtimestamp(p.stat().st_mtime)
+                layout_val = "cramped_room"
+                recipe_val = "ppo_custom"
+                meta_file = p / "metadata.json"
+                if meta_file.is_file():
+                    try:
+                        with open(meta_file, "r", encoding="utf-8") as mf:
+                            m_data = json.load(mf)
+                            layout_val = m_data.get("layout_name", "cramped_room")
+                            recipe_val = m_data.get("recipe", "ppo_custom")
+                    except Exception:
+                        pass
                 records.append({
                     "id": p.name,
                     "name": p.name,
                     "date_trained": mtime.strftime("%m/%d/%Y"),
                     "time_trained": mtime.strftime("%H:%M"),
                     "checkpoint_path": resolved,
-                    "layout": "cramped_room",
-                    "recipe": "ppo_custom",
+                    "layout": layout_val,
+                    "recipe": recipe_val,
                 })
                 existing_paths.add(resolved)
                 existing_ids.add(p.name)

@@ -316,15 +316,32 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
     elif agent_type.startswith("custom:"):
         model_path = Path(agent_type[len("custom:"):])
         meta_file = model_path / "metadata.json"
+        warning = None
         if meta_file.is_file():
             import json
             with open(meta_file, "r", encoding="utf-8") as f:
                 meta = json.load(f)
             recipe = meta.get("recipe", "ppo_greedy")
-            layout = meta.get("layout_name", layout_name)
-            checkpoint_dirs = sorted(p for p in model_path.glob("checkpoint_*") if p.is_dir())
+
+            # Check if this model was trained on all maps or has layout subdirectories
+            layout_target_dir = model_path / layout_name
+            if layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*")):
+                active_model_dir = layout_target_dir
+                active_meta_file = active_model_dir / "metadata.json"
+                if active_meta_file.is_file():
+                    with open(active_meta_file, "r", encoding="utf-8") as f:
+                        active_meta = json.load(f)
+                    recipe = active_meta.get("recipe", recipe)
+                layout = layout_name
+            else:
+                active_model_dir = model_path
+                layout = meta.get("layout_name", layout_name)
+                if layout not in ("all_layouts", "all_maps", layout_name):
+                    warning = f"Custom agent '{model_path.name}' was trained on '{layout}', not '{layout_name}'."
+
+            checkpoint_dirs = sorted(p for p in active_model_dir.glob("checkpoint_*") if p.is_dir())
             if not checkpoint_dirs:
-                raise FileNotFoundError(f"No checkpoint directory found in {model_path}")
+                raise FileNotFoundError(f"No checkpoint directory found in {active_model_dir}")
             latest_ckpt_dir = checkpoint_dirs[-1]
             ckpt_files = [p for p in latest_ckpt_dir.glob("checkpoint-*") if p.is_file() and not p.name.endswith(".tune_metadata")]
             if not ckpt_files:
@@ -334,7 +351,7 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 from training.train_agent import build_trainer
                 from human_aware_rl.rllib.rllib import RlLibAgent
 
-                trainer_key = str(model_path.resolve())
+                trainer_key = f"{str(model_path.resolve())}_{layout}"
                 if trainer_key not in _TRAINER_CACHE:
                     partner_type = meta.get("partner_type", "greedy")
                     partner_prob = meta.get("partner_prob", None)
@@ -355,7 +372,7 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 agent.set_agent_index(agent_index)
                 agent.set_mdp(mdp)
                 agent.reset()
-            return agent, None
+            return agent, warning
         else:
             with suppress_c_stderr():
                 from experiments.run_pretrained_policy_comparison import load_trainer
@@ -384,17 +401,35 @@ def get_custom_trained_agents() -> list[tuple[str, str]]:
     for p in sorted(models_dir.iterdir()):
         if not p.is_dir() or p.name.startswith("."):
             continue
-        has_checkpoint = any(p.glob("checkpoint_*")) or (p / "config.pkl").is_file()
+        has_checkpoint = (
+            any(p.glob("checkpoint_*"))
+            or any(p.rglob("checkpoint_*"))
+            or (p / "config.pkl").is_file()
+            or (p / "metadata.json").is_file()
+        )
         if has_checkpoint:
             name = p.name
-            if "ppo_greedy" in name:
-                label = f"PPO (Trained w/ Greedy)"
-            elif "ppo_50_50" in name:
-                label = f"PPO (50/50 Mix)"
+            meta_file = p / "metadata.json"
+            is_all_layouts = False
+            if meta_file.is_file():
+                try:
+                    import json
+                    with open(meta_file, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    if meta.get("layout_name") in ("all_layouts", "all_maps"):
+                        is_all_layouts = True
+                except Exception:
+                    pass
+
+            map_tag = " (All Maps)" if is_all_layouts else ""
+            if name in ("ppo_greedy", "ppo greedy"):
+                label = f"PPO Greedy{map_tag}"
+            elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
+                label = f"PPO v Greedy{map_tag}"
             elif "ppo_sp" in name:
-                label = f"PPO (Custom Self-Play)"
+                label = f"PPO Custom SP{map_tag}"
             else:
-                label = f"PPO ({name})"
+                label = f"PPO ({name}){map_tag}"
             results.append((label, f"custom:{p.resolve()}"))
     return results
 

@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 import pygame
 
@@ -245,6 +246,72 @@ class TestTrainModeAndDB(unittest.TestCase):
             self.assertEqual(args[0], "osascript")
             self.assertIn("tail -f", args[2])
 
+    def test_all_maps_training_dropdown_and_execution(self):
+        # 1. Verify train layout dropdown
+        self.assertTrue(hasattr(self.app, "dropdown_train_layout"))
+        options = self.app.dropdown_train_layout.options
+        self.assertEqual(options[0], ("All Maps", "all_layouts"))
+        self.assertEqual(self.app.train_layout, "all_layouts")
+
+        # 2. Select layout
+        self.app._on_train_layout_changed("cramped_room")
+        self.assertEqual(self.app.train_layout, "cramped_room")
+
+        self.app._on_train_layout_changed("all_layouts")
+        self.assertEqual(self.app.train_layout, "all_layouts")
+
+        # 3. Test starting training via btn_train_start.on_click()
+        self.app.train_agent_name = "TestJeff_AllMaps"
+        self.app.train_iters = 100
+        with patch("subprocess.Popen") as mock_pop:
+            mock_sub = MagicMock()
+            mock_sub.poll.return_value = None
+            mock_pop.return_value = mock_sub
+
+            self.app.btn_train_start.on_click()
+
+            mock_pop.assert_called_once()
+            cmd = mock_pop.call_args[0][0]
+            self.assertIn("--layout", cmd)
+            self.assertIn("all_layouts", cmd)
+            self.assertIn("--iters", cmd)
+            self.assertIn("100", cmd)
+            self.assertEqual(self.app.train_view, "active")
+            self.assertEqual(self.app.train_progress_total, 500)
+
+        # 4. Test polling progress with multi-layout status
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        status_data = {
+            "status": "training",
+            "recipe": "ppo_greedy",
+            "layout": "all_layouts",
+            "current_layout": "asymmetric_advantages",
+            "layout_index": 2,
+            "total_layouts": 5,
+            "current_iter": 150,
+            "total_iters": 500,
+            "reward_mean": 12.5,
+            "percent": 30.0,
+            "eta_seconds": 700,
+        }
+        with open(status_file, "w", encoding="utf-8") as f:
+            json.dump(status_data, f)
+
+        self.app._poll_training_progress()
+        self.assertEqual(self.app.train_progress_cur, 150)
+        self.assertEqual(self.app.train_progress_total, 500)
+        self.assertEqual(self.app.train_reward_mean, 12.5)
+        self.assertEqual(self.app.train_current_layout, "asymmetric_advantages")
+
+        # 5. Draw active frame with all maps status
+        self.app._draw_frame()
+
+        # Clean up status file
+        if status_file.exists():
+            status_file.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()
+

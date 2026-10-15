@@ -1,0 +1,10 @@
+{
+  "recipe": "ppo_50_50",
+  "layout_name": "coordination_ring",
+  "partner_type": "greedy",
+  "partner_prob": 0.5,
+  "current_iter": 100,
+  "total_iters": 100,
+  "reward_mean": 39.09,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_v_greedy/coordination_ring/checkpoint_000100"
+}

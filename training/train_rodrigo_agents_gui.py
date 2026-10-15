@@ -35,12 +35,14 @@ def train_via_gui_button() -> None:
     app = OvercookedApp()
     app.active_mode = "train"
     app.train_view = "setup"
-    app.current_layout = "cramped_room"
-    app.train_iters = 500
+    app.train_layout = "all_layouts"
+    if hasattr(app, "dropdown_train_layout"):
+        app.dropdown_train_layout.selected_value = "all_layouts"
+    app.train_iters = 100
 
     agents_to_train = [
-        ("ppo_greedy", "greedy", "Greedy Specialist"),
-        ("ppo_v_greedy", "ppo_50_50", "PPO 50/50 Mix (SP + Greedy)"),
+        ("ppo_greedy", "greedy", "Greedy Specialist: PPO vs Heuristic Greedy"),
+        ("ppo_v_greedy", "ppo_50_50", "PPO 50/50 Mix: Half Self-Play, Half Heuristic Greedy"),
     ]
 
     for agent_name, recipe, description in agents_to_train:
@@ -51,8 +53,9 @@ def train_via_gui_button() -> None:
         # Set up GUI inputs as user would in sidebar
         app.train_agent_name = agent_name
         app.input_agent_name.text = agent_name
+        app._on_train_layout_changed("all_layouts")
         app._on_recipe_changed(recipe)
-        app.train_iters = 500
+        app.train_iters = 100
 
         print(f"[GUI] Recipe selected: {app.train_recipe}")
         print(f"[GUI] Partner configuration: {app.train_agent_1} ({app.train_agent_1_pct}%) vs {app.train_agent_2} ({app.train_agent_2_pct}%)")
@@ -72,8 +75,9 @@ def train_via_gui_button() -> None:
             if app.train_progress_cur != last_logged_iter:
                 last_logged_iter = app.train_progress_cur
                 pct = int(round((app.train_progress_cur / max(1, app.train_progress_total)) * 100))
+                current_l = getattr(app, "train_current_layout", "all_layouts")
                 print(
-                    f"[GUI PROGRESS] {app.train_progress_cur:03d}/{app.train_progress_total:03d} "
+                    f"[GUI PROGRESS] [{current_l}] {app.train_progress_cur:03d}/{app.train_progress_total:03d} "
                     f"({pct:3d}%) | ETA: {app.train_eta_str:>10s} | Reward: {app.train_reward_mean:+.2f}"
                 )
 
