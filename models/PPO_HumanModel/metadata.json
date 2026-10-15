@@ -1,0 +1,10 @@
+{
+  "recipe": "ppo_bc",
+  "layout_name": "cramped_room",
+  "partner_type": "bc",
+  "partner_prob": 0.5,
+  "current_iter": 500,
+  "total_iters": 500,
+  "reward_mean": 314.89,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/PPO_HumanModel/checkpoint_000500"
+}

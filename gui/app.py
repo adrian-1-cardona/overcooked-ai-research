@@ -860,12 +860,23 @@ class OvercookedApp:
         self.train_view = "active"
         self.train_progress_cur = 0
         self.train_progress_total = 100
-        initial_eta = 100 * 24  # Baseline estimate of 40 mins (24s / iter)
+        initial_eta = 100 * 2  # Baseline estimate (~2s per iteration with 4 rollout workers)
         self.train_eta_seconds = initial_eta
-        hrs = initial_eta // 3600
-        mins = (initial_eta % 3600) // 60
-        self.train_eta_str = f"{hrs}hr {mins}min"
+        self.train_eta_str = self._format_eta(initial_eta)
         self.train_last_poll_time = time.time()
+
+    @staticmethod
+    def _format_eta(total_seconds: int) -> str:
+        s = max(0, int(total_seconds))
+        hrs = s // 3600
+        mins = (s % 3600) // 60
+        secs = s % 60
+        if hrs > 0:
+            return f"{hrs}hr {mins:02d}min"
+        elif mins > 0:
+            return f"{mins}min {secs:02d}s"
+        else:
+            return f"{secs}s"
 
     def _open_live_training_terminal(self) -> None:
         log_file = REPO_ROOT / "results" / "training_live.log"
@@ -1007,9 +1018,7 @@ class OvercookedApp:
         else:
             current_eta = self.train_eta_seconds
 
-        hrs = current_eta // 3600
-        mins = (current_eta % 3600) // 60
-        self.train_eta_str = f"{hrs}hr {mins}min"
+        self.train_eta_str = self._format_eta(current_eta)
 
     def _view_trained_agent_live(self) -> None:
         self._refresh_agent_options()
@@ -2172,7 +2181,7 @@ class OvercookedApp:
             t_surf = f_title.render("Training Complete!", True, (22, 163, 74))
             self.window.blit(t_surf, t_surf.get_rect(center=card_rect.center))
 
-            pb_lbl = "Progress Bar: 100/100 (100%)"
+            pb_lbl = f"Progress Bar: {self.train_progress_total}/{self.train_progress_total} (100%)"
             self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 180))
 
             pb_rect = pygame.Rect(sb_x, 204, sb_w, 36)
@@ -2182,7 +2191,7 @@ class OvercookedApp:
                 pygame.draw.line(self.window, (220, 38, 38), (x, pb_rect.bottom - 2), (min(pb_rect.right, x + 8), pb_rect.y + 2), width=2)
             pygame.draw.rect(self.window, BORDER_BLACK, pb_rect, width=2)
 
-            self.window.blit(f_lbl.render("Estimated Time: 0hr 0min", True, TEXT_PRIMARY), (sb_x, 252))
+            self.window.blit(f_lbl.render("Estimated Time: 0s", True, TEXT_PRIMARY), (sb_x, 252))
 
             self.btn_view_jeff.draw(self.window)
             self.btn_view_agent_db.draw(self.window)

@@ -4,7 +4,7 @@
   "layout": "cramped_room",
   "current_iter": 1,
   "total_iters": 1,
-  "reward_mean": 9.6,
+  "reward_mean": 9.9,
   "percent": 100.0,
   "eta_seconds": 0,
   "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/TestJeff_Bot/checkpoint_000001"
