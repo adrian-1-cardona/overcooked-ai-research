@@ -1065,6 +1065,21 @@ class OvercookedApp:
                         self.train_reward_mean = data.get("reward_mean", 0.0)
                         self.train_current_layout = data.get("current_layout", self.train_layout)
                         self.train_recipe = data.get("recipe", getattr(self, "train_recipe", "greedy"))
+                        self.train_layout_index = data.get("layout_index", 1)
+                        self.train_total_layouts = data.get("total_layouts", 5)
+                        self.train_layout_iter = data.get("layout_iter", self.train_progress_cur)
+                        self.train_layout_total_iters = data.get("layout_total_iters", 650)
+
+                        # Sync kitchen environment preview to current layout being trained
+                        if (
+                            self.active_mode == "train"
+                            and self.train_current_layout
+                            and self.train_current_layout != self.current_layout
+                        ):
+                            try:
+                                self._load_environment(self.train_current_layout)
+                            except Exception:
+                                pass
 
                         name_from_data = data.get("agent_name")
                         if not name_from_data:
@@ -1887,11 +1902,15 @@ class OvercookedApp:
                     banner_rect = pygame.Rect((self.game_pane_width - banner_w) // 2, 16, banner_w, 32)
                     if self.train_view == "active":
                         cur_l = getattr(self, "train_current_layout", self.train_layout)
-                        if self.train_layout in ("all", "all_layouts", "all_maps"):
-                            b_text = f"TRAINING: {self.train_last_trained_name.upper()} [ALL MAPS: {cur_l.upper()}] ({self.train_progress_cur}/{self.train_progress_total})"
-                        else:
-                            b_text = f"TRAINING: {self.train_last_trained_name.upper()} ({self.train_progress_cur}/{self.train_progress_total})"
-                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=(254, 226, 226), text_color=(220, 38, 38), font_size=12, bold=True)
+                        l_idx = getattr(self, "train_layout_index", 1)
+                        tot_l = getattr(self, "train_total_layouts", 5)
+                        l_iter = getattr(self, "train_layout_iter", self.train_progress_cur)
+                        l_tot_iter = getattr(self, "train_layout_total_iters", 650)
+                        agent_idx_str = "1/2" if "ppo_greedy" in self.train_last_trained_name or self.train_recipe == "greedy" else "2/2"
+                        banner_w = min(560, self.game_pane_width - 40)
+                        banner_rect = pygame.Rect((self.game_pane_width - banner_w) // 2, 16, banner_w, 32)
+                        b_text = f"TRAINING [{agent_idx_str}]: {self.train_last_trained_name.upper()} | MAP [{l_idx}/{tot_l}]: {cur_l.upper()} ({l_iter}/{l_tot_iter} iters)"
+                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=(254, 226, 226), text_color=(220, 38, 38), font_size=11, bold=True)
                     elif self.train_view == "complete":
                         b_text = f"TRAINED: {self.train_last_trained_name.upper()} READY TO TEST"
                         UIBanner.draw(self.window, banner_rect, b_text, bg_color=(220, 252, 231), text_color=(22, 101, 52), font_size=12, bold=True)
@@ -2339,25 +2358,30 @@ class OvercookedApp:
 
         elif self.train_view == "active":
             # Image 3: Active Training View
-            card_rect = pygame.Rect(sb_x, 100, sb_w, 60)
+            card_rect = pygame.Rect(sb_x, 96, sb_w, 70)
             UICard.draw(self.window, card_rect, bg_color=(255, 255, 255), border_color=BORDER_BLACK, shadow_offset=2)
-            title_text = "Training (Paused) . . ." if self.train_is_paused else "Training . . ."
+            title_text = "Training (Paused) . . ." if self.train_is_paused else "Training Live . . ."
             t_surf = f_title.render(title_text, True, TEXT_PRIMARY)
-            self.window.blit(t_surf, t_surf.get_rect(center=(card_rect.centerx, card_rect.centery - 10)))
+            self.window.blit(t_surf, t_surf.get_rect(center=(card_rect.centerx, card_rect.centery - 16)))
             f_sub = FontManager.get_font(10, bold=False)
-            recipe_display = self.train_recipe.upper().replace("_", " ")
             cur_l = getattr(self, "train_current_layout", self.train_layout)
-            if self.train_layout in ("all", "all_layouts", "all_maps"):
-                layout_display = f"ALL MAPS ({cur_l.upper()})"
-            else:
-                layout_display = cur_l.upper()
-            r_surf = f_sub.render(f"Recipe: {recipe_display} | Map: {layout_display}", True, TEXT_MUTED)
-            self.window.blit(r_surf, r_surf.get_rect(center=(card_rect.centerx, card_rect.centery + 14)))
+            l_idx = getattr(self, "train_layout_index", 1)
+            tot_l = getattr(self, "train_total_layouts", 5)
+            agent_idx_str = "Agent 1 of 2" if "ppo_greedy" in self.train_last_trained_name or self.train_recipe == "greedy" else "Agent 2 of 2"
+            next_agent_str = "Next: ppo_v_greedy" if agent_idx_str == "Agent 1 of 2" else "Final Run"
+            sub1_text = f"{agent_idx_str}: {self.train_last_trained_name.upper()}"
+            sub2_text = f"Map {l_idx}/{tot_l}: {cur_l.upper()} | {next_agent_str}"
+            s1_surf = f_sub.render(sub1_text, True, TEXT_PRIMARY)
+            s2_surf = f_sub.render(sub2_text, True, TEXT_MUTED)
+            self.window.blit(s1_surf, s1_surf.get_rect(center=(card_rect.centerx, card_rect.centery + 4)))
+            self.window.blit(s2_surf, s2_surf.get_rect(center=(card_rect.centerx, card_rect.centery + 18)))
 
             fraction = max(0.0, min(1.0, self.train_progress_cur / max(1, self.train_progress_total)))
             pct = int(round(fraction * 100))
-            pb_lbl = f"Progress Bar: {self.train_progress_cur}/{self.train_progress_total} ({pct}%)"
-            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 172))
+            l_iter = getattr(self, "train_layout_iter", self.train_progress_cur)
+            l_tot = getattr(self, "train_layout_total_iters", 650)
+            pb_lbl = f"Overall: {self.train_progress_cur}/{self.train_progress_total} ({pct}%) | Map: {l_iter}/{l_tot}"
+            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 174))
 
             pb_rect = pygame.Rect(sb_x, 194, sb_w, 32)
             pygame.draw.rect(self.window, SHADOW_BLACK, pb_rect.move(2, 2))
@@ -2375,7 +2399,7 @@ class OvercookedApp:
             eta_lbl = f"Estimated Time: {self.train_eta_str}"
             self.window.blit(f_lbl.render(eta_lbl, True, TEXT_PRIMARY), (sb_x, 236))
 
-            rew_lbl = f"Mean Reward: {self.train_reward_mean:+.2f}"
+            rew_lbl = f"Mean Reward: {self.train_reward_mean:+.2f} (Berkeley PPO)"
             self.window.blit(f_lbl.render(rew_lbl, True, TEXT_PRIMARY), (sb_x, 258))
 
             self.btn_view_training_live.draw(self.window)
