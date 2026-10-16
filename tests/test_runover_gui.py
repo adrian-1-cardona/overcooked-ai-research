@@ -311,20 +311,31 @@ class TestOvercookedGUI(unittest.TestCase):
         self.assertEqual(self.app.step_count, 1)
 
     def test_matrix_dynamic_agent_discovery(self) -> None:
-        """Verify that Rodrigo benchmark agents (ppo_greedy, ppo_v_greedy) show up in matrix running."""
-        self.app._on_mode_changed("matrix")
-        self.app._draw_frame()
+        """Verify that newly discovered agents show up in matrix running."""
+        fake_id = "test_discovery_agent"
+        fake_path = REPO_ROOT / "models" / fake_id
+        fake_path.mkdir(parents=True, exist_ok=True)
+        (fake_path / "metadata.json").write_text('{"recipe": "greedy", "layout_name": "cramped_room"}')
+        try:
+            self.app._refresh_agent_options()
+            self.app._on_mode_changed("matrix")
+            self.app._draw_frame()
 
-        self.assertIn("ppo_greedy", self.app.matrix_agents)
-        self.assertIn("ppo_v_greedy", self.app.matrix_agents)
-        self.assertIn("ppo_greedy", self.app.matrix_agent_checkboxes)
-        self.assertIn("ppo_v_greedy", self.app.matrix_agent_checkboxes)
+            self.assertIn(fake_id, self.app.matrix_agents)
+            self.assertIn(fake_id, self.app.matrix_agent_checkboxes)
 
-        # Verify checkboxes can be toggled
-        self.app._toggle_matrix_agent("ppo_greedy", False)
-        self.assertFalse(self.app.matrix_agents["ppo_greedy"])
-        self.app._toggle_matrix_agent("ppo_greedy", True)
-        self.assertTrue(self.app.matrix_agents["ppo_greedy"])
+            # Verify checkboxes can be toggled
+            self.app._toggle_matrix_agent(fake_id, False)
+            self.assertFalse(self.app.matrix_agents[fake_id])
+            self.app._toggle_matrix_agent(fake_id, True)
+            self.assertTrue(self.app.matrix_agents[fake_id])
+        finally:
+            from gui.agent_database import AgentDatabase
+            AgentDatabase.delete_agent(fake_id)
+            if fake_path.exists():
+                import shutil
+                shutil.rmtree(fake_path, ignore_errors=True)
+            self.app._refresh_agent_options()
 
     def test_trained_agent_shows_in_live_and_matrix(self) -> None:
         """Verify that after an agent is trained, it immediately shows up in live testing and matrix running."""

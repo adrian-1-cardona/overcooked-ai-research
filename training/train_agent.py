@@ -106,7 +106,7 @@ def build_trainer(
         return OvercookedPartnerMultiAgent(
             base_env=base_env,
             reward_shaping_factor=1.0,
-            reward_shaping_horizon=float("inf"),
+            reward_shaping_horizon=5000000,
             use_phi=False,
             partner_type=ptype,
             partner_prob=prob,
@@ -194,7 +194,7 @@ def build_trainer(
         "policies_to_train": ["ppo"],
     }
 
-    rollout_fragment_length = (train_batch_size // num_workers) if num_workers > 0 else 400
+    rollout_fragment_length = 400
 
     trainer_config = {
         "env": env_name,
@@ -206,13 +206,14 @@ def build_trainer(
         "train_batch_size": train_batch_size,
         "sgd_minibatch_size": sgd_minibatch_size,
         "rollout_fragment_length": rollout_fragment_length,
-        "num_sgd_iter": 4,
+        "num_sgd_iter": 8,
         "lr": lr,
         "gamma": 0.99,
         "lambda": 0.98,
         "clip_param": 0.1,
         "vf_loss_coeff": 1e-4,
         "kl_coeff": 0.2,
+        "grad_clip": 0.1,
         "seed": seed,
         "framework": "tf",
         "eager_tracing": False,
@@ -245,7 +246,7 @@ def train_single_layout(
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 100,
+    num_iters: int = 500,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -418,7 +419,7 @@ def train_multi_layout(
     recipe: str = "ppo_greedy",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 100,
+    num_iters: int = 500,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -542,7 +543,7 @@ def train(
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 100,
+    num_iters: int = 500,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -607,8 +608,8 @@ def main() -> None:
     parser.add_argument(
         "--iters",
         type=int,
-        default=100,
-        help="Number of training iterations (default: 100)",
+        default=500,
+        help="Number of training iterations (default: 500)",
     )
     parser.add_argument(
         "--num-workers",

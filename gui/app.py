@@ -202,7 +202,7 @@ class OvercookedApp:
         self.train_process: subprocess.Popen[Any] | None = None
         self.train_progress_cur = 0
         self.train_progress_total = 500
-        self.train_iters = 100
+        self.train_iters = 500
         self.train_eta_seconds = 1000
         self.train_last_poll_time = 0.0
         self.train_eta_str = "16min 40s"
@@ -905,7 +905,7 @@ class OvercookedApp:
         out_dir = REPO_ROOT / "models" / agent_name
         venv_python = AGENT_EVAL_DIR / ".venv" / "bin" / "python"
         python_bin = str(venv_python) if venv_python.is_file() else sys.executable
-        iters_per_layout = getattr(self, "train_iters", 100)
+        iters_per_layout = getattr(self, "train_iters", 500)
         target_layout = getattr(self, "train_layout", "all_layouts")
         cmd = [
             python_bin,
