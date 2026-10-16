@@ -201,8 +201,8 @@ class OvercookedApp:
         self.train_last_trained_name = "Jeff"
         self.train_process: subprocess.Popen[Any] | None = None
         self.train_progress_cur = 0
-        self.train_progress_total = 600
-        self.train_iters = 600
+        self.train_progress_total = 650
+        self.train_iters = 650
         self.train_eta_seconds = 1000
         self.train_last_poll_time = 0.0
         self.train_eta_str = "16min 40s"
@@ -676,25 +676,11 @@ class OvercookedApp:
             step=10,
             on_change=self._on_slider_2_changed,
         )
-        name_w = (sb_w - 10) * 50 // 100
-        iters_w = (sb_w - 10) - name_w
         self.input_agent_name = UITextInput(
-            rect=(sb_x, 380, name_w, 28),
+            rect=(sb_x, 380, sb_w, 28),
             text="Jeff",
             placeholder="Agent Name",
             on_change=lambda t: setattr(self, "train_agent_name", t),
-        )
-        train_iters_opts = [
-            ("600 iters (Berkeley ~2.5M)", 600),
-            ("1000 iters (Deep Plan)", 1000),
-            ("300 iters (Medium)", 300),
-            ("100 iters (Fast Test)", 100),
-        ]
-        self.dropdown_train_iters = UIDropdown(
-            rect=(sb_x + name_w + 10, 380, iters_w, 28),
-            options=train_iters_opts,
-            selected_value=self.train_iters,
-            on_change=self._on_train_iters_changed,
         )
         self.btn_train_start = UIButton(
             rect=(sb_x, 418, sb_w, 38),
@@ -789,14 +775,6 @@ class OvercookedApp:
         total_it = 5 * self.train_iters if new_layout in ("all", "all_layouts", "all_maps") else self.train_iters
         self.train_progress_total = total_it
 
-    def _on_train_iters_changed(self, iters_val: Any) -> None:
-        try:
-            self.train_iters = int(iters_val)
-        except Exception:
-            self.train_iters = 500
-        target_layout = getattr(self, "train_layout", "all_layouts")
-        total_it = 5 * self.train_iters if target_layout in ("all", "all_layouts", "all_maps") else self.train_iters
-        self.train_progress_total = total_it
 
     def _on_recipe_changed(self, new_recipe: str) -> None:
         self.train_recipe = new_recipe
@@ -928,7 +906,7 @@ class OvercookedApp:
         out_dir = REPO_ROOT / "models" / agent_name
         venv_python = AGENT_EVAL_DIR / ".venv" / "bin" / "python"
         python_bin = str(venv_python) if venv_python.is_file() else sys.executable
-        iters_per_layout = getattr(self, "train_iters", 600)
+        iters_per_layout = getattr(self, "train_iters", 650)
         target_layout = getattr(self, "train_layout", "all_layouts")
         cmd = [
             python_bin,
@@ -1769,7 +1747,6 @@ class OvercookedApp:
                 self.dropdown_train_recipe,
                 self.dropdown_train_agent_1,
                 self.dropdown_train_agent_2,
-                self.dropdown_train_iters,
             ]
             open_dd = next((dd for dd in dropdowns if dd.is_open), None)
             if open_dd is not None:
@@ -2205,7 +2182,7 @@ class OvercookedApp:
             for dd in (self.dropdown_layout, self.dropdown_agent_1, self.dropdown_agent_0):
                 dd.draw_overlay(self.window)
         elif self.active_mode == "train" and self.train_view == "setup":
-            for dd in (self.dropdown_train_iters, self.dropdown_train_agent_2, self.dropdown_train_agent_1, self.dropdown_train_recipe, self.dropdown_train_layout):
+            for dd in (self.dropdown_train_agent_2, self.dropdown_train_agent_1, self.dropdown_train_recipe, self.dropdown_train_layout):
                 dd.draw_overlay(self.window)
 
         # Modal Confirmation (Draws on top of everything when visible)
@@ -2303,13 +2280,11 @@ class OvercookedApp:
             self.window.blit(f_lbl.render(s2_lbl, True, TEXT_MUTED), (sb_x, 324))
             self.slider_agent_2.draw(self.window)
 
-            # Name Agent & Iterations
+            # Name Agent (iterations locked to 650 per Berkeley paper standard)
             self.window.blit(f_sec.render("name agent:", True, TEXT_PRIMARY), (sb_x, 364))
+            fixed_iter_lbl = f_lbl.render("[650 iters - Berkeley Standard]", True, TEXT_MUTED)
+            self.window.blit(fixed_iter_lbl, (sb_x + sb_w - fixed_iter_lbl.get_width(), 364))
             self.input_agent_name.draw(self.window)
-
-            iters_x = sb_x + self.input_agent_name.rect.width + 10
-            self.window.blit(f_sec.render("iterations:", True, TEXT_PRIMARY), (iters_x, 364))
-            self.dropdown_train_iters.draw(self.window)
 
             # Train Button
             self.btn_train_start.draw(self.window)
