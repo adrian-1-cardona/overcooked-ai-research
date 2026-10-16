@@ -643,19 +643,19 @@ class OvercookedApp:
             ("Custom Blend (Sliders)", "custom"),
         ]
         self.dropdown_train_recipe = UIDropdown(
-            rect=(sb_x, 148, sb_w, 28),
+            rect=(sb_x, 150, sb_w, 28),
             options=recipe_opts,
             selected_value=self.train_recipe,
             on_change=self._on_recipe_changed,
         )
         self.dropdown_train_agent_1 = UIDropdown(
-            rect=(sb_x, 200, sb_w, 28),
+            rect=(sb_x, 204, sb_w, 28),
             options=train_agent_opts,
             selected_value=self.train_agent_1,
             on_change=self._on_train_agent_1_changed,
         )
         self.slider_agent_1 = UISlider(
-            rect=(sb_x, 248, sb_w, 18),
+            rect=(sb_x, 258, sb_w, 18),
             value=self.train_agent_1_pct,
             min_val=0,
             max_val=100,
@@ -663,13 +663,13 @@ class OvercookedApp:
             on_change=self._on_slider_1_changed,
         )
         self.dropdown_train_agent_2 = UIDropdown(
-            rect=(sb_x, 290, sb_w, 28),
+            rect=(sb_x, 326, sb_w, 28),
             options=train_agent_opts,
             selected_value=self.train_agent_2,
             on_change=self._on_train_agent_2_changed,
         )
         self.slider_agent_2 = UISlider(
-            rect=(sb_x, 338, sb_w, 18),
+            rect=(sb_x, 380, sb_w, 18),
             value=self.train_agent_2_pct,
             min_val=0,
             max_val=100,
@@ -677,13 +677,13 @@ class OvercookedApp:
             on_change=self._on_slider_2_changed,
         )
         self.input_agent_name = UITextInput(
-            rect=(sb_x, 380, sb_w, 28),
+            rect=(sb_x, 448, sb_w, 28),
             text="Jeff",
             placeholder="Agent Name",
             on_change=lambda t: setattr(self, "train_agent_name", t),
         )
         self.btn_train_start = UIButton(
-            rect=(sb_x, 418, sb_w, 38),
+            rect=(sb_x, 488, sb_w, 38),
             text="TRAIN",
             on_click=self._start_training,
             bg_color=COLOR_RUN,
@@ -2259,38 +2259,38 @@ class OvercookedApp:
             self.dropdown_train_layout.draw(self.window)
 
             # Recipe Selector
-            self.window.blit(f_sec.render("agent type / recipe:", True, TEXT_PRIMARY), (sb_x, 132))
+            self.window.blit(f_sec.render("agent type / recipe:", True, TEXT_PRIMARY), (sb_x, 134))
             self.dropdown_train_recipe.draw(self.window)
 
             # Select Agent 1
-            self.window.blit(f_sec.render("select agent 1:", True, TEXT_PRIMARY), (sb_x, 184))
+            self.window.blit(f_sec.render("select agent 1:", True, TEXT_PRIMARY), (sb_x, 188))
             self.dropdown_train_agent_1.draw(self.window)
 
             # Slider 1
             s1_lbl = f"*Drag to the desired amount: {self.train_agent_1_pct}%"
-            self.window.blit(f_lbl.render(s1_lbl, True, TEXT_MUTED), (sb_x, 234))
+            self.window.blit(f_lbl.render(s1_lbl, True, TEXT_MUTED), (sb_x, 242))
             self.slider_agent_1.draw(self.window)
 
             # Select Agent 2
-            self.window.blit(f_sec.render("select agent 2:", True, TEXT_PRIMARY), (sb_x, 274))
+            self.window.blit(f_sec.render("select agent 2:", True, TEXT_PRIMARY), (sb_x, 310))
             self.dropdown_train_agent_2.draw(self.window)
 
             # Slider 2
             s2_lbl = f"*Drag to the desired amount: {self.train_agent_2_pct}%"
-            self.window.blit(f_lbl.render(s2_lbl, True, TEXT_MUTED), (sb_x, 324))
+            self.window.blit(f_lbl.render(s2_lbl, True, TEXT_MUTED), (sb_x, 364))
             self.slider_agent_2.draw(self.window)
 
             # Name Agent (iterations locked to 650 per Berkeley paper standard)
-            self.window.blit(f_sec.render("name agent:", True, TEXT_PRIMARY), (sb_x, 364))
+            self.window.blit(f_sec.render("name agent:", True, TEXT_PRIMARY), (sb_x, 432))
             fixed_iter_lbl = f_lbl.render("[650 iters - Berkeley Standard]", True, TEXT_MUTED)
-            self.window.blit(fixed_iter_lbl, (sb_x + sb_w - fixed_iter_lbl.get_width(), 364))
+            self.window.blit(fixed_iter_lbl, (sb_x + sb_w - fixed_iter_lbl.get_width(), 432))
             self.input_agent_name.draw(self.window)
 
             # Train Button
             self.btn_train_start.draw(self.window)
 
             # Recipe Info Card on the bottom of the menu
-            card_y = min(464, self.window_height - 38 - 88 - 8)
+            card_y = min(540, self.window_height - 38 - 88 - 8)
             self._draw_recipe_info_card(sb_x, sb_w, card_y)
 
             # View All Agents link button
