@@ -96,16 +96,44 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_FPS,
         help=f"Framerate for gameplay simulation (default: {DEFAULT_FPS})",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="auto",
+        choices=["auto", "live", "matrix", "train"],
+        help="Initial mode view (default: auto; opens live match, or train view if background training is active)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    chosen_mode = args.mode
+    if chosen_mode == "auto":
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        is_training = False
+        if status_file.is_file():
+            try:
+                import time, json
+                if (time.time() - status_file.stat().st_mtime) < 120.0:
+                    with open(status_file, "r", encoding="utf-8") as f:
+                        if json.load(f).get("status") == "training":
+                            is_training = True
+            except Exception:
+                pass
+        chosen_mode = "train" if is_training else "live"
+
     app = OvercookedApp(
         initial_layout=args.layout,
         horizon=args.horizon,
         fps=args.fps,
     )
+    app.active_mode = chosen_mode
+    if hasattr(app, "switchbar"):
+        app.switchbar.selected_value = chosen_mode
+    if chosen_mode == "train":
+        app.train_view = "active"
+
     app.selected_agent_0_type = args.agent_0
     app.dropdown_agent_0.selected_value = args.agent_0
     app.selected_agent_1_type = args.agent_1

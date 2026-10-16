@@ -1042,9 +1042,6 @@ class OvercookedApp:
         self.train_view = "setup"
 
     def _poll_training_progress(self) -> None:
-        if self.train_view != "active":
-            return
-
         now = time.time()
 
         if self.train_is_paused:
@@ -1054,45 +1051,78 @@ class OvercookedApp:
 
         if status_file.is_file():
             try:
-                with open(status_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                file_age = now - status_file.stat().st_mtime
+                is_fresh = (file_age < 120.0) or (self.train_process is not None and self.train_process.poll() is None)
 
-                self.train_progress_cur = data.get("current_iter", 0)
-                self.train_progress_total = data.get("total_iters", getattr(self, "train_progress_total", 500))
-                self.train_reward_mean = data.get("reward_mean", 0.0)
-                self.train_current_layout = data.get("current_layout", self.train_layout)
+                if is_fresh:
+                    with open(status_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
 
-                eta_sec = data.get("eta_seconds", None)
-                if eta_sec is not None:
-                    self.train_eta_seconds = max(0, int(eta_sec))
-                    self.train_last_poll_time = now
+                    st = data.get("status")
+                    if st == "training":
+                        self.train_progress_cur = data.get("current_iter", 0)
+                        self.train_progress_total = data.get("total_iters", getattr(self, "train_progress_total", 3250))
+                        self.train_reward_mean = data.get("reward_mean", 0.0)
+                        self.train_current_layout = data.get("current_layout", self.train_layout)
+                        self.train_recipe = data.get("recipe", getattr(self, "train_recipe", "greedy"))
 
-                if data.get("status") == "completed" or (self.train_process and self.train_process.poll() == 0):
-                    self.train_eta_seconds = 0
-                    self.train_eta_str = "0s"
-                    model_dir = REPO_ROOT / "models" / self.train_last_trained_name
-                    registered_layout = data.get("layout", getattr(self, "train_layout", "all_layouts"))
-                    AgentDatabase.add_agent(
-                        name=self.train_last_trained_name,
-                        layout=registered_layout,
-                        checkpoint_path=model_dir,
-                        agent_1=self.train_agent_1,
-                        agent_1_pct=self.train_agent_1_pct,
-                        agent_2=self.train_agent_2,
-                        agent_2_pct=self.train_agent_2_pct,
-                        reward_mean=self.train_reward_mean,
-                    )
-                    self._refresh_agent_options()
-                    self.train_view = "complete"
-                    self.train_process = None
-                    self.train_is_paused = False
-                    if hasattr(self, "train_log_file") and self.train_log_file is not None:
-                        try:
-                            self.train_log_file.close()
-                        except Exception:
-                            pass
-                        self.train_log_file = None
-                    return
+                        name_from_data = data.get("agent_name")
+                        if not name_from_data:
+                            if self.train_recipe == "greedy":
+                                name_from_data = "ppo_greedy"
+                            elif self.train_recipe == "ppo_50_50":
+                                name_from_data = "ppo_v_greedy"
+                            else:
+                                name_from_data = getattr(self, "train_last_trained_name", "Trained_Agent")
+                        self.train_last_trained_name = name_from_data
+                        if hasattr(self, "btn_view_jeff"):
+                            self.btn_view_jeff.text = f"View {self.train_last_trained_name} Live"
+
+                        eta_sec = data.get("eta_seconds", None)
+                        if eta_sec is not None:
+                            self.train_eta_seconds = max(0, int(eta_sec))
+                            self.train_last_poll_time = now
+
+                        # Dynamic tab percentage on switchbar
+                        pct = int(round((self.train_progress_cur / max(1, self.train_progress_total)) * 100))
+                        if hasattr(self, "switchbar") and len(self.switchbar.options) >= 3:
+                            self.switchbar.options[2] = (f"Train ({pct}%)", "train")
+
+                        # If user is viewing the Train tab and in setup view, automatically show active view!
+                        if self.active_mode == "train" and self.train_view == "setup":
+                            self.train_view = "active"
+
+                    elif st == "completed" and self.train_view == "active":
+                        self.train_eta_seconds = 0
+                        self.train_eta_str = "0s"
+                        model_dir = REPO_ROOT / "models" / self.train_last_trained_name
+                        registered_layout = data.get("layout", getattr(self, "train_layout", "all_layouts"))
+                        AgentDatabase.add_agent(
+                            name=self.train_last_trained_name,
+                            layout=registered_layout,
+                            checkpoint_path=model_dir,
+                            agent_1=self.train_agent_1,
+                            agent_1_pct=self.train_agent_1_pct,
+                            agent_2=self.train_agent_2,
+                            agent_2_pct=self.train_agent_2_pct,
+                            reward_mean=self.train_reward_mean,
+                        )
+                        self._refresh_agent_options()
+                        self.train_view = "complete"
+                        self.train_process = None
+                        self.train_is_paused = False
+                        if hasattr(self, "train_log_file") and self.train_log_file is not None:
+                            try:
+                                self.train_log_file.close()
+                            except Exception:
+                                pass
+                            self.train_log_file = None
+                        if hasattr(self, "switchbar") and len(self.switchbar.options) >= 3:
+                            self.switchbar.options[2] = ("Train", "train")
+                        return
+                else:
+                    if hasattr(self, "switchbar") and len(self.switchbar.options) >= 3:
+                        self.switchbar.options[2] = ("Train", "train")
             except Exception:
                 pass
 
@@ -1376,6 +1406,17 @@ class OvercookedApp:
 
     def _on_mode_changed(self, new_mode: str) -> None:
         self.active_mode = new_mode
+        if new_mode == "train":
+            status_file = REPO_ROOT / "results" / "training_status.json"
+            if status_file.is_file():
+                try:
+                    if (time.time() - status_file.stat().st_mtime) < 120.0:
+                        with open(status_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        if data.get("status") == "training" and self.train_view != "db":
+                            self.train_view = "active"
+                except Exception:
+                    pass
 
     def _toggle_matrix_agent(self, key: str, val: bool) -> None:
         self.matrix_agents[key] = val
