@@ -1,0 +1,10 @@
+{
+  "recipe": "ppo_50_50",
+  "layout_name": "forced_coordination",
+  "partner_type": "greedy",
+  "partner_prob": 0.5,
+  "current_iter": 100,
+  "total_iters": 100,
+  "reward_mean": 5.27,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_v_greedy/forced_coordination/checkpoint_000100"
+}
