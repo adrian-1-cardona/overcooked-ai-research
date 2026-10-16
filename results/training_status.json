@@ -1,11 +1,12 @@
 {
   "status": "completed",
-  "recipe": "ppo_greedy",
-  "layout": "cramped_room",
-  "current_iter": 2,
-  "total_iters": 2,
-  "reward_mean": 11.62,
+  "recipe": "ppo_50_50",
+  "layout": "all_layouts",
+  "current_layout": "all_layouts",
+  "current_iter": 3250,
+  "total_iters": 3250,
+  "reward_mean": 314.21,
   "percent": 100.0,
   "eta_seconds": 0,
-  "checkpoint_dir": "/tmp/test_speed/checkpoint_000002"
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_v_greedy"
 }
