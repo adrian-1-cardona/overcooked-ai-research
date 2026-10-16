@@ -240,8 +240,12 @@ class OvercookedApp:
         self.matrix_agents = {
             "ppo_sp": True,
             "greedy": True,
-            "random": True,
+            "ppo_greedy": True,
+            "ppo_v_greedy": True,
+            "random": False,
         }
+        self.matrix_agent_checkboxes: dict[str, UICheckbox] = {}
+        self.matrix_level_checkboxes: dict[str, UICheckbox] = {}
         self.matrix_levels = {
             "cramped_room": True,
             "asymmetric_advantages": True,
@@ -340,6 +344,110 @@ class OvercookedApp:
             self.dropdown_train_agent_1.options = train_opts
         if hasattr(self, "dropdown_train_agent_2"):
             self.dropdown_train_agent_2.options = train_opts
+        self._refresh_matrix_widgets()
+
+    def _get_matrix_agent_options(self) -> list[tuple[str, str]]:
+        """Return list of (agent_id, display_label) for Matrix Mode benchmarks."""
+        options: list[tuple[str, str]] = [
+            ("ppo_sp", "PPO (Self-Play)"),
+            ("greedy", "Greedy Chef"),
+        ]
+        seen = {"ppo_sp", "greedy", "random"}
+
+        # Discover all trained custom agents
+        custom_agents = get_custom_trained_agents()
+        for label, val in custom_agents:
+            target_path = Path(val.split("custom:", 1)[1])
+            agent_id = target_path.name
+            if agent_id not in seen:
+                options.append((agent_id, label))
+                seen.add(agent_id)
+
+        try:
+            records = AgentDatabase.load()
+            for r in records:
+                aid = r.get("id") or r.get("name")
+                if aid and aid not in seen:
+                    name = r.get("name", aid)
+                    options.append((aid, f"PPO ({name})"))
+                    seen.add(aid)
+        except Exception:
+            pass
+
+        options.append(("random", "Random Chef"))
+        return options
+
+    def _refresh_matrix_widgets(self) -> None:
+        """Dynamically build and position Matrix benchmark checkboxes and controls."""
+        sb_x = self.game_pane_width + 16
+        sb_w = SIDEBAR_WIDTH - 32
+        cb_h = 24
+
+        agent_opts = self._get_matrix_agent_options()
+        for aid, _ in agent_opts:
+            if aid not in self.matrix_agents:
+                self.matrix_agents[aid] = (aid != "random")
+
+        # Clean up deleted agents
+        existing_aids = {aid for aid, _ in agent_opts}
+        for k in list(self.matrix_agents.keys()):
+            if k not in existing_aids:
+                self.matrix_agents.pop(k, None)
+
+        self.matrix_agent_checkboxes = {}
+        curr_y = 88 + 20
+
+        for aid, label in agent_opts:
+            short_label = label
+            if len(short_label) > 28:
+                short_label = short_label[:26] + ".."
+            cb = UICheckbox(
+                (sb_x, curr_y, sb_w, cb_h),
+                short_label,
+                checked=self.matrix_agents.get(aid, True),
+                on_change=lambda v, key=aid: self._toggle_matrix_agent(key, v),
+            )
+            self.matrix_agent_checkboxes[aid] = cb
+            curr_y += 26
+
+        self.cb_ppo = self.matrix_agent_checkboxes.get("ppo_sp")
+        self.cb_greedy = self.matrix_agent_checkboxes.get("greedy")
+        self.cb_random = self.matrix_agent_checkboxes.get("random")
+
+        curr_y += 8
+        self.matrix_levels_header_y = curr_y
+        curr_y += 20
+
+        levels_config = [
+            ("cramped_room", "Cramped Room"),
+            ("asymmetric_advantages", "Asymmetric Advantages"),
+            ("coordination_ring", "Coordination Ring"),
+            ("forced_coordination", "Forced Coordination"),
+            ("counter_circuit_o_1order", "Counter Circuit"),
+        ]
+        self.matrix_level_checkboxes = {}
+        for lid, llabel in levels_config:
+            cb = UICheckbox(
+                (sb_x, curr_y, sb_w, cb_h),
+                llabel,
+                checked=self.matrix_levels.get(lid, lid in ("cramped_room", "asymmetric_advantages")),
+                on_change=lambda v, key=lid: self._toggle_matrix_level(key, v),
+            )
+            self.matrix_level_checkboxes[lid] = cb
+            curr_y += 26
+
+        self.cb_cramped = self.matrix_level_checkboxes.get("cramped_room")
+        self.cb_asym = self.matrix_level_checkboxes.get("asymmetric_advantages")
+        self.cb_ring = self.matrix_level_checkboxes.get("coordination_ring")
+        self.cb_forced = self.matrix_level_checkboxes.get("forced_coordination")
+        self.cb_circuit = self.matrix_level_checkboxes.get("counter_circuit_o_1order")
+
+        curr_y += 8
+        self.matrix_k_header_y = curr_y
+        if hasattr(self, "btn_k_minus"):
+            self.btn_k_minus.rect = pygame.Rect(sb_x + 130, curr_y - 4, 28, 26)
+        if hasattr(self, "btn_k_plus"):
+            self.btn_k_plus.rect = pygame.Rect(sb_x + 195, curr_y - 4, 28, 26)
 
     def _setup_widgets(self) -> None:
         """Initialize sidebar switchbar, dropdowns, checkboxes, and buttons."""
@@ -462,56 +570,6 @@ class OvercookedApp:
         # -----------------------------
         # Matrix Test Mode Controls
         # -----------------------------
-        self.cb_ppo = UICheckbox(
-            (sb_x, 108, sb_w, 24),
-            "PPO (Self-Play)",
-            checked=self.matrix_agents.get("ppo_sp", True),
-            on_change=lambda v: self._toggle_matrix_agent("ppo_sp", v),
-        )
-        self.cb_greedy = UICheckbox(
-            (sb_x, 134, sb_w, 24),
-            "Greedy Chef",
-            checked=self.matrix_agents.get("greedy", True),
-            on_change=lambda v: self._toggle_matrix_agent("greedy", v),
-        )
-        self.cb_random = UICheckbox(
-            (sb_x, 160, sb_w, 24),
-            "Random Chef",
-            checked=self.matrix_agents.get("random", True),
-            on_change=lambda v: self._toggle_matrix_agent("random", v),
-        )
-
-        self.cb_cramped = UICheckbox(
-            (sb_x, 212, sb_w, 24),
-            "Cramped Room",
-            checked=self.matrix_levels.get("cramped_room", True),
-            on_change=lambda v: self._toggle_matrix_level("cramped_room", v),
-        )
-        self.cb_asym = UICheckbox(
-            (sb_x, 238, sb_w, 24),
-            "Asymmetric Advantages",
-            checked=self.matrix_levels.get("asymmetric_advantages", True),
-            on_change=lambda v: self._toggle_matrix_level("asymmetric_advantages", v),
-        )
-        self.cb_ring = UICheckbox(
-            (sb_x, 264, sb_w, 24),
-            "Coordination Ring",
-            checked=self.matrix_levels.get("coordination_ring", False),
-            on_change=lambda v: self._toggle_matrix_level("coordination_ring", v),
-        )
-        self.cb_forced = UICheckbox(
-            (sb_x, 290, sb_w, 24),
-            "Forced Coordination",
-            checked=self.matrix_levels.get("forced_coordination", False),
-            on_change=lambda v: self._toggle_matrix_level("forced_coordination", v),
-        )
-        self.cb_circuit = UICheckbox(
-            (sb_x, 316, sb_w, 24),
-            "Counter Circuit",
-            checked=self.matrix_levels.get("counter_circuit_o_1order", False),
-            on_change=lambda v: self._toggle_matrix_level("counter_circuit_o_1order", v),
-        )
-
         self.btn_k_minus = UIButton(
             rect=(sb_x + 130, 350, 28, 26),
             text="-",
@@ -547,6 +605,7 @@ class OvercookedApp:
             font_size=13,
             is_visible=False,
         )
+        self._refresh_matrix_widgets()
 
         # -----------------------------
         # Train Mode Controls (Images 1, 2, 3, 4)
@@ -674,19 +733,28 @@ class OvercookedApp:
 
         # Image 2: Complete Widgets
         self.btn_view_jeff = UIButton(
-            rect=(sb_x, 330, sb_w, 42),
-            text="View Jeff",
+            rect=(sb_x, 298, sb_w, 36),
+            text="View Jeff Live",
             on_click=self._view_trained_agent_live,
             bg_color=COLOR_RUN,
             hover_color=COLOR_RUN_HOVER,
             text_color=COLOR_RUN_TEXT,
-            font_size=14,
+            font_size=13,
+        )
+        self.btn_view_matrix = UIButton(
+            rect=(sb_x, 344, sb_w, 36),
+            text="View in Matrix Benchmark",
+            on_click=self._view_trained_agent_matrix,
+            bg_color=(230, 240, 255),
+            hover_color=(210, 230, 255),
+            text_color=(20, 60, 160),
+            font_size=13,
         )
         self.btn_view_agent_db = UIButton(
-            rect=(sb_x, 390, sb_w, 42),
-            text="View agent DB",
+            rect=(sb_x, 390, sb_w, 36),
+            text="View Agent DB",
             on_click=lambda: setattr(self, "train_view", "db"),
-            font_size=14,
+            font_size=13,
         )
 
         # Image 1: Database Widgets
@@ -1065,6 +1133,17 @@ class OvercookedApp:
         self.dropdown_agent_1.selected_value = "greedy"
         self.reset_simulation()
         self.start_or_resume()
+
+    def _view_trained_agent_matrix(self) -> None:
+        self._refresh_agent_options()
+        self.active_mode = "matrix"
+        self.switchbar.selected_value = "matrix"
+        target = self.train_last_trained_name.lower()
+        for k in self.matrix_agents:
+            if target in k.lower():
+                self.matrix_agents[k] = True
+                if hasattr(self, "matrix_agent_checkboxes") and k in self.matrix_agent_checkboxes:
+                    self.matrix_agent_checkboxes[k].checked = True
 
     def _confirm_delete_agent(self, agent_id: str, agent_name: str) -> None:
         self.modal_confirm.show(
@@ -1605,14 +1684,14 @@ class OvercookedApp:
 
             elif self.active_mode == "matrix":
                 if not self.matrix_running:
-                    self.cb_ppo.handle_event(event)
-                    self.cb_greedy.handle_event(event)
-                    self.cb_random.handle_event(event)
-                    self.cb_cramped.handle_event(event)
-                    self.cb_asym.handle_event(event)
-                    self.cb_ring.handle_event(event)
-                    self.cb_forced.handle_event(event)
-                    self.cb_circuit.handle_event(event)
+                    if hasattr(self, "matrix_agent_checkboxes"):
+                        for cb in self.matrix_agent_checkboxes.values():
+                            if cb is not None:
+                                cb.handle_event(event)
+                    if hasattr(self, "matrix_level_checkboxes"):
+                        for cb in self.matrix_level_checkboxes.values():
+                            if cb is not None:
+                                cb.handle_event(event)
                     self.btn_k_minus.handle_event(event)
                     self.btn_k_plus.handle_event(event)
                     self.btn_run_matrix.handle_event(event)
@@ -1662,6 +1741,8 @@ class OvercookedApp:
 
         elif self.train_view == "complete":
             if self.btn_view_jeff.handle_event(event):
+                return
+            if hasattr(self, "btn_view_matrix") and self.btn_view_matrix.handle_event(event):
                 return
             if self.btn_view_agent_db.handle_event(event):
                 return
@@ -1997,25 +2078,27 @@ class OvercookedApp:
 
             # Agents Section
             self.window.blit(f_sec.render("AGENTS TO BENCHMARK", True, TEXT_PRIMARY), (sb_x, 88))
-            self.cb_ppo.draw(self.window)
-            self.cb_greedy.draw(self.window)
-            self.cb_random.draw(self.window)
+            if hasattr(self, "matrix_agent_checkboxes"):
+                for cb in self.matrix_agent_checkboxes.values():
+                    if cb is not None:
+                        cb.draw(self.window)
 
             # Levels Section
-            self.window.blit(f_sec.render("LEVELS TO INCLUDE", True, TEXT_PRIMARY), (sb_x, 188))
-            self.cb_cramped.draw(self.window)
-            self.cb_asym.draw(self.window)
-            self.cb_ring.draw(self.window)
-            self.cb_forced.draw(self.window)
-            self.cb_circuit.draw(self.window)
+            levels_y = getattr(self, "matrix_levels_header_y", 188)
+            self.window.blit(f_sec.render("LEVELS TO INCLUDE", True, TEXT_PRIMARY), (sb_x, levels_y))
+            if hasattr(self, "matrix_level_checkboxes"):
+                for cb in self.matrix_level_checkboxes.values():
+                    if cb is not None:
+                        cb.draw(self.window)
 
             # K Stepper Section
-            self.window.blit(f_sec.render("TRIALS / PAIR (K)", True, TEXT_PRIMARY), (sb_x, 355))
+            k_y = getattr(self, "matrix_k_header_y", 355)
+            self.window.blit(f_sec.render("TRIALS / PAIR (K)", True, TEXT_PRIMARY), (sb_x, k_y))
             self.btn_k_minus.draw(self.window)
             f_k = FontManager.get_mono_font(15, bold=True)
             k_surf = f_k.render(str(self.matrix_k), True, TEXT_PRIMARY)
             k_x = (sb_x + 130 + 28) + (195 - (130 + 28) - k_surf.get_width()) // 2
-            self.window.blit(k_surf, (k_x, 354))
+            self.window.blit(k_surf, (k_x, k_y))
             self.btn_k_plus.draw(self.window)
 
             # Matrix Benchmark Buttons
@@ -2244,6 +2327,8 @@ class OvercookedApp:
             self.window.blit(f_lbl.render("Estimated Time: 0s", True, TEXT_PRIMARY), (sb_x, 252))
 
             self.btn_view_jeff.draw(self.window)
+            if hasattr(self, "btn_view_matrix"):
+                self.btn_view_matrix.draw(self.window)
             self.btn_view_agent_db.draw(self.window)
 
             # Recipe Info Card on the bottom of the complete menu

@@ -18,6 +18,7 @@ pygame.init()
 
 from gui.app import OvercookedApp, AppState
 from gui.agent_manager import (
+    REPO_ROOT,
     get_available_layouts,
     is_ppo_supported,
     create_agent,
@@ -308,6 +309,57 @@ class TestOvercookedGUI(unittest.TestCase):
         pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT))
         self.app.handle_events()
         self.assertEqual(self.app.step_count, 1)
+
+    def test_matrix_dynamic_agent_discovery(self) -> None:
+        """Verify that Rodrigo benchmark agents (ppo_greedy, ppo_v_greedy) show up in matrix running."""
+        self.app._on_mode_changed("matrix")
+        self.app._draw_frame()
+
+        self.assertIn("ppo_greedy", self.app.matrix_agents)
+        self.assertIn("ppo_v_greedy", self.app.matrix_agents)
+        self.assertIn("ppo_greedy", self.app.matrix_agent_checkboxes)
+        self.assertIn("ppo_v_greedy", self.app.matrix_agent_checkboxes)
+
+        # Verify checkboxes can be toggled
+        self.app._toggle_matrix_agent("ppo_greedy", False)
+        self.assertFalse(self.app.matrix_agents["ppo_greedy"])
+        self.app._toggle_matrix_agent("ppo_greedy", True)
+        self.assertTrue(self.app.matrix_agents["ppo_greedy"])
+
+    def test_trained_agent_shows_in_live_and_matrix(self) -> None:
+        """Verify that after an agent is trained, it immediately shows up in live testing and matrix running."""
+        from gui.agent_database import AgentDatabase
+        fake_id = "test_matrix_agent_123"
+        fake_name = "TestMatrixAgent"
+        fake_path = REPO_ROOT / "models" / fake_id
+        fake_path.mkdir(parents=True, exist_ok=True)
+        (fake_path / "metadata.json").write_text('{"recipe": "greedy", "layout_name": "cramped_room"}')
+
+        try:
+            # Refresh options
+            self.app._refresh_agent_options()
+
+            # Check live testing dropdowns
+            live_agent_ids = [opt[1] for opt in self.app.agent_options]
+            self.assertTrue(any(fake_id in opt_val for opt_val in live_agent_ids))
+
+            # Check matrix mode checkboxes
+            self.assertIn(fake_id, self.app.matrix_agent_checkboxes)
+            self.assertIn(fake_id, self.app.matrix_agents)
+
+            # Test complete view button
+            self.app.train_last_trained_name = fake_id
+            self.app.train_view = "complete"
+            self.app.btn_view_matrix.on_click()
+            self.assertEqual(self.app.active_mode, "matrix")
+            self.assertTrue(self.app.matrix_agents[fake_id])
+
+        finally:
+            AgentDatabase.delete_agent(fake_id)
+            if fake_path.exists():
+                import shutil
+                shutil.rmtree(fake_path, ignore_errors=True)
+            self.app._refresh_agent_options()
 
 
 if __name__ == "__main__":

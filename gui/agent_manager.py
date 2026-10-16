@@ -384,6 +384,27 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             return agent, None
 
     else:
+        # Check if agent_type corresponds to an entry in AgentDatabase or a folder in models/
+        models_dir = REPO_ROOT / "models"
+        resolved_path = None
+        target_dir = models_dir / agent_type
+        if target_dir.is_dir() and (any(target_dir.glob("checkpoint_*")) or any(target_dir.rglob("checkpoint_*")) or (target_dir / "metadata.json").is_file()):
+            resolved_path = target_dir.resolve()
+        else:
+            try:
+                from gui.agent_database import AgentDatabase
+                for r in AgentDatabase.load():
+                    if agent_type.lower() in (r.get("id", "").lower(), r.get("name", "").lower()):
+                        ckpt = r.get("checkpoint_path")
+                        if ckpt and Path(ckpt).exists():
+                            resolved_path = Path(ckpt).resolve()
+                            break
+            except Exception:
+                pass
+
+        if resolved_path is not None:
+            return create_agent(f"custom:{resolved_path}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+
         raise ValueError(f"Unknown agent type: {agent_type}")
 
     agent.set_agent_index(agent_index)
