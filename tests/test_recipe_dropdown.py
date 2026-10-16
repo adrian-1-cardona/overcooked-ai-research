@@ -155,6 +155,34 @@ class TestRecipeDropdown(unittest.TestCase):
         action, _ = agent.action(self.app.env.state)
         self.assertIn(action, [(0, -1), (0, 1), (1, 0), (-1, 0), (0, 0), "interact"])
 
+    def test_custom_agent_missing_checkpoint_falls_back_to_greedy(self):
+        from pathlib import Path
+        mdp = self.app.mdp
+        custom_model = Path(__file__).resolve().parents[1] / "models" / "ppo_v_greedy"
+        if custom_model.is_dir():
+            agent, warning = create_agent(f"custom:{custom_model}", agent_index=1, mdp=mdp, layout_name="bonus_order_test")
+            self.assertIsNotNone(agent)
+            self.assertIn("has no checkpoint", warning)
+            action, _ = agent.action(self.app.env.state)
+            self.assertIn(action, [(0, -1), (0, 1), (1, 0), (-1, 0), (0, 0), "interact"])
+
+    def test_gui_handles_incompatible_custom_agent_live_without_crashing(self):
+        from pathlib import Path
+        custom_model = Path(__file__).resolve().parents[1] / "models" / "ppo_v_greedy"
+        if custom_model.is_dir():
+            self.app._on_layout_changed("bonus_order_test")
+            self.app._on_agent_0_changed("ppo")
+            self.app._on_agent_1_changed(f"custom:{custom_model}")
+            self.assertIsNotNone(self.app.warning_message)
+            self.assertIn("ppo_v_greedy", self.app.warning_message)
+
+            # Start game should start cleanly without crashing
+            self.app.handle_run_or_restart_click()
+            self.assertEqual(self.app.state.name, "RUNNING")
+            self.assertEqual(len(self.app.agents), 2)
+            self.app._step_simulation()
+            self.assertGreaterEqual(self.app.step_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

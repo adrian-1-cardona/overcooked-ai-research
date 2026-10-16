@@ -201,8 +201,8 @@ class OvercookedApp:
         self.train_last_trained_name = "Jeff"
         self.train_process: subprocess.Popen[Any] | None = None
         self.train_progress_cur = 0
-        self.train_progress_total = 500
-        self.train_iters = 500
+        self.train_progress_total = 600
+        self.train_iters = 600
         self.train_eta_seconds = 1000
         self.train_last_poll_time = 0.0
         self.train_eta_str = "16min 40s"
@@ -307,10 +307,8 @@ class OvercookedApp:
                 background_color=BG_GAME_FRAME,
             )
 
-            # Check PPO availability notification
-            if self.selected_agent_1_type == "ppo" or self.selected_agent_0_type == "ppo":
-                if not is_ppo_supported(layout_name):
-                    self.warning_message = f"Note: PPO is not bundled for '{layout_name}'. Will use Greedy."
+            # Check agent compatibility notification
+            self._update_compatibility_warning()
         except Exception as e:
             self.status_message = f"Error loading layout: {e}"
 
@@ -687,10 +685,10 @@ class OvercookedApp:
             on_change=lambda t: setattr(self, "train_agent_name", t),
         )
         train_iters_opts = [
-            ("500 iters (Paper)", 500),
-            ("1000 iters (Deep)", 1000),
-            ("100 iters (Fast)", 100),
-            ("250 iters (Medium)", 250),
+            ("600 iters (Berkeley ~2.5M)", 600),
+            ("1000 iters (Deep Plan)", 1000),
+            ("300 iters (Medium)", 300),
+            ("100 iters (Fast Test)", 100),
         ]
         self.dropdown_train_iters = UIDropdown(
             rect=(sb_x + name_w + 10, 380, iters_w, 28),
@@ -930,7 +928,7 @@ class OvercookedApp:
         out_dir = REPO_ROOT / "models" / agent_name
         venv_python = AGENT_EVAL_DIR / ".venv" / "bin" / "python"
         python_bin = str(venv_python) if venv_python.is_file() else sys.executable
-        iters_per_layout = getattr(self, "train_iters", 500)
+        iters_per_layout = getattr(self, "train_iters", 600)
         target_layout = getattr(self, "train_layout", "all_layouts")
         cmd = [
             python_bin,
@@ -1182,13 +1180,31 @@ class OvercookedApp:
         evict_trainer_cache(agent_id)
         self._refresh_agent_options()
 
+    def _update_compatibility_warning(self) -> None:
+        """Update warning_message based on whether selected agents support current_layout."""
+        warns = []
+        for idx, agent_t in enumerate((self.selected_agent_0_type, self.selected_agent_1_type)):
+            agent_lower = agent_t.lower().strip()
+            if agent_lower in ("ppo", "ppo (self-play)", "ppo_sp"):
+                if not is_ppo_supported(self.current_layout):
+                    warns.append(f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy.")
+            elif agent_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning"):
+                if not is_ppo_supported(self.current_layout):
+                    warns.append(f"Note: BC is not bundled for '{self.current_layout}'. Will use Greedy.")
+            elif agent_t.startswith("custom:"):
+                model_path = Path(agent_t[len("custom:"):])
+                layout_target_dir = model_path / self.current_layout
+                has_layout_ckpt = layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*"))
+                has_direct_ckpt = any(model_path.glob("checkpoint_*"))
+                if not has_layout_ckpt and not has_direct_ckpt:
+                    warns.append(f"Note: '{model_path.name}' has no checkpoint for '{self.current_layout}'. Will use Greedy.")
+        self.warning_message = " | ".join(warns) if warns else None
+
     def _on_agent_0_changed(self, new_val: str) -> None:
         if self.is_mid_run:
             return  # Locked mid-run
         self.selected_agent_0_type = new_val
-        self.warning_message = None
-        if new_val == "ppo" and not is_ppo_supported(self.current_layout):
-            self.warning_message = f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy."
+        self._update_compatibility_warning()
         if self.state == AppState.DONE:
             self.state = AppState.SETUP
             self.btn_view_graph.is_visible = False
@@ -1197,9 +1213,7 @@ class OvercookedApp:
         if self.is_mid_run:
             return  # Locked mid-run
         self.selected_agent_1_type = new_val
-        self.warning_message = None
-        if new_val == "ppo" and not is_ppo_supported(self.current_layout):
-            self.warning_message = f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy."
+        self._update_compatibility_warning()
         if self.state == AppState.DONE:
             self.state = AppState.SETUP
             self.btn_view_graph.is_visible = False
@@ -1210,6 +1224,7 @@ class OvercookedApp:
             return  # Locked mid-run
         print(f"[GUI] Layout changed live to: {new_layout}")
         self._load_environment(new_layout)
+        self._update_compatibility_warning()
         if self.state == AppState.DONE:
             self.state = AppState.SETUP
             self.btn_view_graph.is_visible = False
@@ -1226,7 +1241,7 @@ class OvercookedApp:
         self._load_environment(self.current_layout)
         self.state = AppState.SETUP
         self.status_message = "Ready. Select agents & layout, then click RUN!"
-        self.warning_message = None
+        self._update_compatibility_warning()
         self.btn_view_graph.is_visible = False
         print("[GUI] Reset to SETUP mode.")
 
@@ -1236,34 +1251,47 @@ class OvercookedApp:
             return
 
         print(f"[GUI] Starting episode on {self.current_layout} (Agent 0: {self.selected_agent_0_type}, Agent 1: {self.selected_agent_1_type})")
-        if self.selected_agent_0_type == "ppo" or self.selected_agent_1_type == "ppo":
-            self.status_message = "Loading PPO neural network weights..."
+        if (
+            "ppo" in self.selected_agent_0_type.lower()
+            or "ppo" in self.selected_agent_1_type.lower()
+            or "custom" in self.selected_agent_0_type.lower()
+            or "custom" in self.selected_agent_1_type.lower()
+        ):
+            self.status_message = "Loading neural network weights..."
         else:
             self.status_message = "Initializing agents..."
         self._draw_frame()
 
-        # Reset environment
-        self.env.reset()
-        self.step_count = 0
-        self.cumulative_score = 0.0
-        self.recorded_rows.clear()
-        self.history.clear()
+        try:
+            # Reset environment
+            self.env.reset()
+            self.step_count = 0
+            self.cumulative_score = 0.0
+            self.recorded_rows.clear()
+            self.history.clear()
 
-        # Save initial state in history
-        import copy
-        self.history.append((copy.deepcopy(self.env.state), 0, 0.0, []))
+            # Save initial state in history
+            import copy
+            self.history.append((copy.deepcopy(self.env.state), 0, 0.0, []))
 
-        # Instantiate agents
-        a0, warn0 = create_agent(self.selected_agent_0_type, 0, self.mdp, self.current_layout)
-        a1, warn1 = create_agent(self.selected_agent_1_type, 1, self.mdp, self.current_layout)
-        self.agents = [a0, a1]
+            # Instantiate agents
+            a0, warn0 = create_agent(self.selected_agent_0_type, 0, self.mdp, self.current_layout)
+            a1, warn1 = create_agent(self.selected_agent_1_type, 1, self.mdp, self.current_layout)
+            self.agents = [a0, a1]
 
-        if warn0 or warn1:
-            self.warning_message = warn0 or warn1
+            warnings = [w for w in (warn0, warn1) if w]
+            if warnings:
+                self.warning_message = " | ".join(warnings)
+                print(f"[GUI Warning] {self.warning_message}")
 
-        self.state = AppState.RUNNING
-        self.status_message = f"Playing {self.current_layout} ({self.fps} FPS)!"
-        self.btn_view_graph.is_visible = False
+            self.state = AppState.RUNNING
+            self.status_message = f"Playing {self.current_layout} ({self.fps} FPS)!"
+            self.btn_view_graph.is_visible = False
+        except Exception as e:
+            self.state = AppState.SETUP
+            self.warning_message = f"Failed to start episode: {e}"
+            self.status_message = f"Error: {e}"
+            print(f"[GUI Error] Failed to start episode: {e}")
 
     def toggle_pause(self) -> None:
         """Toggle simulation pause state."""
@@ -1537,7 +1565,14 @@ class OvercookedApp:
             self.history.pop(0)
 
         state = self.env.state
-        joint_action = tuple(agent.action(state)[0] for agent in self.agents)
+        try:
+            joint_action = tuple(agent.action(state)[0] for agent in self.agents)
+        except Exception as e:
+            print(f"[GUI Error] Agent step action failed at step {self.step_count}: {e}")
+            self.state = AppState.PAUSED
+            self.warning_message = f"Simulation paused: Agent error: {e}"
+            self.status_message = f"Error at step {self.step_count}: {e}"
+            return
 
         next_state, sparse_reward, done, info = self.env.step(joint_action)
         self.cumulative_score += sparse_reward

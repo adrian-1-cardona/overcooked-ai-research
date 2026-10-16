@@ -224,6 +224,25 @@ def is_upstream_greedy_supported(mdp: OvercookedGridworld) -> bool:
         return False
 
 
+def _create_fallback_greedy_agent(mdp: OvercookedGridworld, agent_index: int) -> Agent:
+    """Create a reliable greedy agent (Upstream GreedyHumanModel or fallback GreedySymbolSearchAgent)."""
+    if is_upstream_greedy_supported(mdp):
+        try:
+            from overcooked_ai_py.agents.agent import GreedyHumanModel
+            from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
+            mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
+            agent = GreedyHumanModel(mlam)
+        except Exception:
+            from agents.greedy_symbol_search import GreedySymbolSearchAgent
+            agent = GreedySymbolSearchAgent()
+    else:
+        from agents.greedy_symbol_search import GreedySymbolSearchAgent
+        agent = GreedySymbolSearchAgent()
+    agent.set_agent_index(agent_index)
+    agent.set_mdp(mdp)
+    return agent
+
+
 def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, layout_name: str) -> tuple[Agent, str | None]:
     """
     Factory creating an Agent instance.
@@ -244,47 +263,13 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             except Exception as e:
                 print(f"[Warning] Failed to load PPO ({e}); falling back to Greedy.")
                 warning = f"PPO load failed: {e}. Falling back to Greedy."
-                if is_upstream_greedy_supported(mdp):
-                    try:
-                        from overcooked_ai_py.agents.agent import GreedyHumanModel
-                        from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
-                        mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
-                        agent = GreedyHumanModel(mlam)
-                    except Exception:
-                        from agents.greedy_symbol_search import GreedySymbolSearchAgent
-                        agent = GreedySymbolSearchAgent()
-                else:
-                    from agents.greedy_symbol_search import GreedySymbolSearchAgent
-                    agent = GreedySymbolSearchAgent()
+                agent = _create_fallback_greedy_agent(mdp, agent_index)
         else:
             warning = f"No bundled PPO model for '{layout_name}'. Using Greedy agent."
-            if is_upstream_greedy_supported(mdp):
-                try:
-                    from overcooked_ai_py.agents.agent import GreedyHumanModel
-                    from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
-                    mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
-                    agent = GreedyHumanModel(mlam)
-                except Exception:
-                    from agents.greedy_symbol_search import GreedySymbolSearchAgent
-                    agent = GreedySymbolSearchAgent()
-            else:
-                from agents.greedy_symbol_search import GreedySymbolSearchAgent
-                agent = GreedySymbolSearchAgent()
+            agent = _create_fallback_greedy_agent(mdp, agent_index)
 
     elif agent_type_lower in ("greedy", "greedy agent", "greedy agent (upstream)", "upstream", "upstream (baseline)", "greedy_human_model"):
-        if is_upstream_greedy_supported(mdp):
-            try:
-                from overcooked_ai_py.agents.agent import GreedyHumanModel
-                from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
-                mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS)
-                agent = GreedyHumanModel(mlam)
-            except Exception:
-                from agents.greedy_symbol_search import GreedySymbolSearchAgent
-                agent = GreedySymbolSearchAgent()
-                warning = f"Upstream Greedy planner unsupported for '{layout_name}'; using GreedySymbolSearchAgent."
-        else:
-            from agents.greedy_symbol_search import GreedySymbolSearchAgent
-            agent = GreedySymbolSearchAgent()
+        agent = _create_fallback_greedy_agent(mdp, agent_index)
 
     elif agent_type_lower in ("random", "random agent"):
         agent = RandomAgent(all_actions=True)
@@ -294,33 +279,47 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
 
     elif agent_type_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning"):
         if is_ppo_supported(layout_name):
-            with suppress_c_stderr():
-                from experiments.run_pretrained_policy_comparison import bundled_checkpoint, load_trainer
-                from human_aware_rl.rllib.rllib import get_agent_from_trainer
-                bc_key = f"bc_{layout_name}"
-                if bc_key not in _TRAINER_CACHE:
-                    checkpoint_path = bundled_checkpoint(layout_name, "BC")
-                    trainer = load_trainer(checkpoint_path)
-                    _TRAINER_CACHE[bc_key] = trainer
-                trainer = _TRAINER_CACHE[bc_key]
-                agent = get_agent_from_trainer(trainer, policy_id="bc", agent_index=agent_index)
-                agent.set_agent_index(agent_index)
-                agent.set_mdp(mdp)
-                agent.reset()
-            return agent, None
+            try:
+                with suppress_c_stderr():
+                    from experiments.run_pretrained_policy_comparison import bundled_checkpoint, load_trainer
+                    from human_aware_rl.rllib.rllib import get_agent_from_trainer
+                    bc_key = f"bc_{layout_name}"
+                    if bc_key not in _TRAINER_CACHE:
+                        checkpoint_path = bundled_checkpoint(layout_name, "BC")
+                        trainer = load_trainer(checkpoint_path)
+                        _TRAINER_CACHE[bc_key] = trainer
+                    trainer = _TRAINER_CACHE[bc_key]
+                    agent = get_agent_from_trainer(trainer, policy_id="bc", agent_index=agent_index)
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                    agent.reset()
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                return agent, None
+            except Exception as e:
+                warning = f"BC load failed: {e}; using Greedy Chef."
+                agent = _create_fallback_greedy_agent(mdp, agent_index)
+                return agent, warning
         else:
             warning = f"BC human model is not bundled for '{layout_name}'; using Greedy Chef."
-            from agents.greedy_symbol_search import GreedySymbolSearchAgent
-            agent = GreedySymbolSearchAgent()
+            agent = _create_fallback_greedy_agent(mdp, agent_index)
+            return agent, warning
 
     elif agent_type.startswith("custom:"):
         model_path = Path(agent_type[len("custom:"):])
+        if not model_path.exists():
+            warning = f"Custom agent directory not found: '{model_path.name}'. Using Greedy agent."
+            return _create_fallback_greedy_agent(mdp, agent_index), warning
+
         meta_file = model_path / "metadata.json"
         warning = None
         if meta_file.is_file():
             import json
-            with open(meta_file, "r", encoding="utf-8") as f:
-                meta = json.load(f)
+            try:
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+            except Exception:
+                meta = {}
             recipe = meta.get("recipe", "ppo_greedy")
 
             # Check if this model was trained on all maps or has layout subdirectories
@@ -329,59 +328,95 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 active_model_dir = layout_target_dir
                 active_meta_file = active_model_dir / "metadata.json"
                 if active_meta_file.is_file():
-                    with open(active_meta_file, "r", encoding="utf-8") as f:
-                        active_meta = json.load(f)
-                    recipe = active_meta.get("recipe", recipe)
+                    try:
+                        with open(active_meta_file, "r", encoding="utf-8") as f:
+                            active_meta = json.load(f)
+                        recipe = active_meta.get("recipe", recipe)
+                    except Exception:
+                        pass
                 layout = layout_name
             else:
-                active_model_dir = model_path
-                layout = meta.get("layout_name", layout_name)
-                if layout not in ("all_layouts", "all_maps", layout_name):
-                    warning = f"Custom agent '{model_path.name}' was trained on '{layout}', not '{layout_name}'."
+                # Check if model_path directly contains checkpoints (single-layout model)
+                direct_ckpts = [p for p in model_path.glob("checkpoint_*") if p.is_dir()]
+                if direct_ckpts:
+                    active_model_dir = model_path
+                    layout = meta.get("layout_name", layout_name)
+                    if layout not in ("all_layouts", "all_maps", layout_name):
+                        try:
+                            trained_shape = OvercookedGridworld.from_layout_name(layout).shape
+                            current_shape = mdp.shape
+                            if trained_shape != current_shape:
+                                warning = (
+                                    f"Custom agent '{model_path.name}' trained on '{layout}' "
+                                    f"({trained_shape[0]}x{trained_shape[1]}) is incompatible with "
+                                    f"'{layout_name}' ({current_shape[0]}x{current_shape[1]}). Using Greedy agent."
+                                )
+                                return _create_fallback_greedy_agent(mdp, agent_index), warning
+                        except Exception:
+                            pass
+                        warning = f"Custom agent '{model_path.name}' was trained on '{layout}', not '{layout_name}'."
+                else:
+                    warning = f"Custom agent '{model_path.name}' has no checkpoint for '{layout_name}'. Using Greedy agent."
+                    return _create_fallback_greedy_agent(mdp, agent_index), warning
 
             checkpoint_dirs = sorted(p for p in active_model_dir.glob("checkpoint_*") if p.is_dir())
             if not checkpoint_dirs:
-                raise FileNotFoundError(f"No checkpoint directory found in {active_model_dir}")
+                warning = f"No checkpoint directory found in {active_model_dir}. Using Greedy agent."
+                return _create_fallback_greedy_agent(mdp, agent_index), warning
             latest_ckpt_dir = checkpoint_dirs[-1]
             ckpt_files = [p for p in latest_ckpt_dir.glob("checkpoint-*") if p.is_file() and not p.name.endswith(".tune_metadata")]
             if not ckpt_files:
-                raise FileNotFoundError(f"No checkpoint file found in {latest_ckpt_dir}")
+                warning = f"No checkpoint file found in {latest_ckpt_dir}. Using Greedy agent."
+                return _create_fallback_greedy_agent(mdp, agent_index), warning
 
-            with suppress_c_stderr():
-                from training.train_agent import build_trainer
-                from human_aware_rl.rllib.rllib import RlLibAgent
+            try:
+                with suppress_c_stderr():
+                    from training.train_agent import build_trainer
+                    from human_aware_rl.rllib.rllib import RlLibAgent
 
-                trainer_key = f"{str(model_path.resolve())}_{layout}"
-                if trainer_key not in _TRAINER_CACHE:
-                    partner_type = meta.get("partner_type", "greedy")
-                    partner_prob = meta.get("partner_prob", None)
-                    trainer, _ = build_trainer(
-                        recipe=recipe,
-                        layout_name=layout,
-                        partner_type=partner_type,
-                        partner_prob=partner_prob,
-                        num_workers=0,
-                    )
-                    trainer.restore(str(ckpt_files[0]))
-                    _TRAINER_CACHE[trainer_key] = trainer
+                    trainer_key = f"{str(model_path.resolve())}_{layout}"
+                    if trainer_key not in _TRAINER_CACHE:
+                        partner_type = meta.get("partner_type", "greedy")
+                        partner_prob = meta.get("partner_prob", None)
+                        trainer, _ = build_trainer(
+                            recipe=recipe,
+                            layout_name=layout,
+                            partner_type=partner_type,
+                            partner_prob=partner_prob,
+                            num_workers=0,
+                        )
+                        trainer.restore(str(ckpt_files[0]))
+                        _TRAINER_CACHE[trainer_key] = trainer
 
-                trainer = _TRAINER_CACHE[trainer_key]
-                policy = trainer.get_policy("ppo")
-                featurize_fn = lambda state, debug=False: mdp.lossless_state_encoding(state, 400)
-                agent = RlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
-                agent.set_agent_index(agent_index)
-                agent.set_mdp(mdp)
-                agent.reset()
-            return agent, warning
+                    trainer = _TRAINER_CACHE[trainer_key]
+                    policy = trainer.get_policy("ppo")
+                    featurize_fn = lambda state, debug=False: mdp.lossless_state_encoding(state, 400)
+                    agent = RlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                    agent.reset()
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                return agent, warning
+            except Exception as e:
+                warning = f"Failed to load custom agent '{model_path.name}': {e}. Using Greedy agent."
+                return _create_fallback_greedy_agent(mdp, agent_index), warning
         else:
-            with suppress_c_stderr():
-                from experiments.run_pretrained_policy_comparison import load_trainer
-                from human_aware_rl.rllib.rllib import get_agent_from_trainer
-                trainer = load_trainer(model_path)
-                agent = get_agent_from_trainer(trainer, policy_id="ppo", agent_index=agent_index)
-                agent.set_mdp(mdp)
-                agent.reset()
-            return agent, None
+            try:
+                with suppress_c_stderr():
+                    from experiments.run_pretrained_policy_comparison import load_trainer
+                    from human_aware_rl.rllib.rllib import get_agent_from_trainer
+                    trainer = load_trainer(model_path)
+                    agent = get_agent_from_trainer(trainer, policy_id="ppo", agent_index=agent_index)
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                    agent.reset()
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                return agent, None
+            except Exception as e:
+                warning = f"Failed to load agent '{model_path.name}': {e}. Using Greedy agent."
+                return _create_fallback_greedy_agent(mdp, agent_index), warning
 
     else:
         # Check if agent_type corresponds to an entry in AgentDatabase or a folder in models/

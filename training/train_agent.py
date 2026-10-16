@@ -62,7 +62,7 @@ def build_trainer(
     partner_prob: float | None = None,
     num_workers: int = 4,
     lr: float = 2.5e-4,
-    train_batch_size: int = 4000,
+    train_batch_size: int = 4800,
     sgd_minibatch_size: int = 800,
     seed: int = 0,
     out_dir: str | Path | None = None,
@@ -195,6 +195,11 @@ def build_trainer(
     }
 
     rollout_fragment_length = 400
+    if num_workers > 0:
+        batch_multiple = num_workers * rollout_fragment_length
+        if train_batch_size % batch_multiple != 0:
+            import math
+            train_batch_size = max(train_batch_size, math.ceil(train_batch_size / batch_multiple) * batch_multiple)
 
     trainer_config = {
         "env": env_name,
@@ -246,7 +251,7 @@ def train_single_layout(
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 500,
+    num_iters: int = 600,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -419,7 +424,7 @@ def train_multi_layout(
     recipe: str = "ppo_greedy",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 500,
+    num_iters: int = 600,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -543,7 +548,7 @@ def train(
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 500,
+    num_iters: int = 600,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -608,8 +613,8 @@ def main() -> None:
     parser.add_argument(
         "--iters",
         type=int,
-        default=500,
-        help="Number of training iterations (default: 500)",
+        default=600,
+        help="Number of training iterations (default: 600)",
     )
     parser.add_argument(
         "--num-workers",

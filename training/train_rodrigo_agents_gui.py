@@ -26,7 +26,7 @@ from gui.agent_database import AgentDatabase
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train Professor Rodrigo's Agents via GUI flow")
-    parser.add_argument("--iters", type=int, default=100, help="Training iterations per layout (default: 100)")
+    parser.add_argument("--iters", type=int, default=600, help="Training iterations per layout (default: 600)")
     parser.add_argument("--layout", type=str, default="all_layouts", help="Layout to train on (default: all_layouts)")
     return parser.parse_args()
 
