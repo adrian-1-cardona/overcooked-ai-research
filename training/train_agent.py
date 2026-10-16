@@ -251,7 +251,7 @@ def train_single_layout(
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 600,
+    num_iters: int = 650,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -424,7 +424,7 @@ def train_multi_layout(
     recipe: str = "ppo_greedy",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 600,
+    num_iters: int = 650,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -548,7 +548,7 @@ def train(
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_iters: int = 600,
+    num_iters: int = 650,
     num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
@@ -613,8 +613,8 @@ def main() -> None:
     parser.add_argument(
         "--iters",
         type=int,
-        default=600,
-        help="Number of training iterations (default: 600)",
+        default=650,
+        help="Number of training iterations (default: 650)",
     )
     parser.add_argument(
         "--num-workers",

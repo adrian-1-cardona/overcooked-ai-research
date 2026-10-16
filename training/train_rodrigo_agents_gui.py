@@ -26,7 +26,7 @@ from gui.agent_database import AgentDatabase
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train Professor Rodrigo's Agents via GUI flow")
-    parser.add_argument("--iters", type=int, default=600, help="Training iterations per layout (default: 600)")
+    parser.add_argument("--iters", type=int, default=650, help="Training iterations per layout (default: 650)")
     parser.add_argument("--layout", type=str, default="all_layouts", help="Layout to train on (default: all_layouts)")
     return parser.parse_args()
 
@@ -51,7 +51,9 @@ def train_via_gui_button() -> None:
     app._on_train_layout_changed(target_layout)
     if hasattr(app, "dropdown_train_layout"):
         app.dropdown_train_layout.selected_value = target_layout
-    app._on_train_iters_changed(num_iters)
+    app.train_iters = num_iters
+    if hasattr(app, "_on_train_iters_changed"):
+        app._on_train_iters_changed(num_iters)
     if hasattr(app, "dropdown_train_iters"):
         app.dropdown_train_iters.selected_value = num_iters
 
@@ -70,7 +72,9 @@ def train_via_gui_button() -> None:
         app.input_agent_name.text = agent_name
         app._on_train_layout_changed(target_layout)
         app._on_recipe_changed(recipe)
-        app._on_train_iters_changed(num_iters)
+        app.train_iters = num_iters
+        if hasattr(app, "_on_train_iters_changed"):
+            app._on_train_iters_changed(num_iters)
         if hasattr(app, "dropdown_train_iters"):
             app.dropdown_train_iters.selected_value = num_iters
 
