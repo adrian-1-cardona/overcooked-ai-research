@@ -1639,6 +1639,16 @@ class OvercookedApp:
 
     def handle_events(self) -> None:
         """Process keyboard, mouse, and window events."""
+        if self.active_mode == "live":
+            is_locked = self.is_mid_run
+            self.dropdown_agent_0.is_enabled = not is_locked
+            self.dropdown_agent_1.is_enabled = not is_locked
+            self.dropdown_layout.is_enabled = not is_locked
+            if is_locked:
+                self.dropdown_agent_0.is_open = False
+                self.dropdown_agent_1.is_open = False
+                self.dropdown_layout.is_open = False
+
         events = pygame.event.get()
 
         for event in events:

@@ -294,6 +294,7 @@ def train_single_layout(
     layout_index: int | None = None,
     total_layouts: int | None = None,
     multi_layout_parent: str | Path | None = None,
+    shutdown_at_end: bool = True,
 ) -> Path:
     """Execute training run for a single layout."""
     print("=" * 60)
@@ -450,7 +451,7 @@ def train_single_layout(
             "checkpoint_dir": str(checkpoint_dir),
         })
 
-    if ray.is_initialized():
+    if shutdown_at_end and ray.is_initialized():
         ray.shutdown()
 
     return Path(checkpoint_dir)
@@ -591,6 +592,7 @@ def train(
     layout_index: int | None = None,
     total_layouts: int | None = None,
     multi_layout_parent: str | Path | None = None,
+    shutdown_at_end: bool = True,
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
     if layout_name in ("all", "all_layouts", "all_maps"):
@@ -615,6 +617,7 @@ def train(
         layout_index=layout_index,
         total_layouts=total_layouts,
         multi_layout_parent=multi_layout_parent,
+        shutdown_at_end=shutdown_at_end,
     )
 
 

@@ -29,10 +29,23 @@ class TestTrainModeAndDB(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         pygame.init()
+        cls._registry_backup = REGISTRY_FILE.read_text(encoding="utf-8") if REGISTRY_FILE.is_file() else None
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        cls._status_backup = status_file.read_text(encoding="utf-8") if status_file.is_file() else None
 
     @classmethod
     def tearDownClass(cls):
-        pygame.quit()
+        if cls._registry_backup is not None:
+            REGISTRY_FILE.write_text(cls._registry_backup, encoding="utf-8")
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        if cls._status_backup is not None:
+            status_file.write_text(cls._status_backup, encoding="utf-8")
+        try:
+            import ray
+            if ray.is_initialized():
+                ray.shutdown()
+        except Exception:
+            pass
 
     def setUp(self):
         for p in MODELS_DIR.glob("TestJeff*"):
@@ -158,6 +171,7 @@ class TestTrainModeAndDB(unittest.TestCase):
             num_iters=1,
             num_workers=0,
             out_dir=test_model_dir,
+            shutdown_at_end=False,
         )
         self.assertTrue((test_model_dir / "metadata.json").is_file())
 
