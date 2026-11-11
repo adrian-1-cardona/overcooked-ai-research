@@ -13,10 +13,13 @@ Provides:
 from __future__ import annotations
 
 import csv
+import json
 import os
+import signal
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from enum import Enum, auto
 from pathlib import Path
@@ -67,7 +70,17 @@ from gui.theme import (
     COLOR_DONE_BADGE,
     FontManager,
 )
-from gui.widgets import UIButton, UIDropdown, UICard, UIBanner, UISwitchbar, UICheckbox
+from gui.widgets import (
+    UIButton,
+    UIDropdown,
+    UICard,
+    UIBanner,
+    UISwitchbar,
+    UICheckbox,
+    UITextInput,
+    UISlider,
+    UIModalConfirm,
+)
 from gui.agent_manager import (
     REPO_ROOT,
     AGENT_EVAL_DIR,
@@ -75,7 +88,10 @@ from gui.agent_manager import (
     create_agent,
     get_available_layouts,
     is_ppo_supported,
+    get_custom_trained_agents,
+    evict_trainer_cache,
 )
+from gui.agent_database import AgentDatabase
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
@@ -89,6 +105,37 @@ DEFAULT_FPS = 10
 DEFAULT_TILE_SIZE = 75
 LAST_RUN_CSV = AGENT_EVAL_DIR / "results" / "last_render_run.csv"
 ALT_LAST_RUN_CSV = REPO_ROOT / "results" / "last_render_run.csv"
+
+RECIPE_INFO: dict[str, dict[str, str]] = {
+    "ppo": {
+        "title": "PPO (Standard) (ppo)",
+        "desc": "100% PPO self-play baseline",
+    },
+    "ppo_sp": {
+        "title": "PPO-SP (Self-Play) (ppo_sp)",
+        "desc": "PPO self-play training",
+    },
+    "ppo_bc": {
+        "title": "PPO-BC (Human Model) (ppo_bc)",
+        "desc": "PPO trained alongside the behavioral cloning human model (50/50 mix)",
+    },
+    "greedy": {
+        "title": "Greedy Specialist (greedy)",
+        "desc": "PPO trained against the heuristic greedy chef",
+    },
+    "ppo_greedy": {
+        "title": "Greedy Specialist (greedy)",
+        "desc": "PPO trained against the heuristic greedy chef",
+    },
+    "ppo_50_50": {
+        "title": "PPO 50/50 Mix (SP + Greedy) (ppo_50_50)",
+        "desc": "Half self-play, half greedy specialist rollouts",
+    },
+    "custom": {
+        "title": "Custom Blend (Sliders) (custom)",
+        "desc": "Custom partner allocation via sliders",
+    },
+}
 
 
 class AppState(Enum):
@@ -136,16 +183,32 @@ class OvercookedApp:
             initial_layout if initial_layout in self.available_layouts else self.available_layouts[0]
         )
 
-        self.agent_options = [
-            ("Human (Keyboard)", "human"),
-            ("PPO (Pretrained RL)", "ppo"),
-            ("Greedy Chef (Upstream)", "greedy"),
-            ("Random Chef", "random"),
-            ("Stay (Idle)", "stay"),
-        ]
+        self.agent_options = self._get_full_agent_options()
 
         self.selected_agent_0_type = "human"
         self.selected_agent_1_type = "ppo"
+
+        # Training Mode State
+        self.train_view = "setup"  # "setup", "active", "complete", "db"
+        self.train_layout = "all_layouts"
+        self.train_current_layout = "all_layouts"
+        self.train_recipe = "custom"
+        self.train_agent_1 = "ppo"
+        self.train_agent_1_pct = 50
+        self.train_agent_2 = "greedy"
+        self.train_agent_2_pct = 50
+        self.train_agent_name = "Jeff"
+        self.train_last_trained_name = "Jeff"
+        self.train_process: subprocess.Popen[Any] | None = None
+        self.train_progress_cur = 0
+        self.train_progress_total = 650
+        self.train_iters = 650
+        self.train_eta_seconds = 1000
+        self.train_last_poll_time = 0.0
+        self.train_eta_str = "16min 40s"
+        self.train_reward_mean = 0.0
+        self.train_is_paused = False
+        self.train_log_file: Any | None = None
 
         # Game simulation state
         self.mdp: OvercookedGridworld | None = None
@@ -177,8 +240,12 @@ class OvercookedApp:
         self.matrix_agents = {
             "ppo_sp": True,
             "greedy": True,
-            "random": True,
+            "ppo_greedy": True,
+            "ppo_v_greedy": True,
+            "random": False,
         }
+        self.matrix_agent_checkboxes: dict[str, UICheckbox] = {}
+        self.matrix_level_checkboxes: dict[str, UICheckbox] = {}
         self.matrix_levels = {
             "cramped_room": True,
             "asymmetric_advantages": True,
@@ -240,12 +307,145 @@ class OvercookedApp:
                 background_color=BG_GAME_FRAME,
             )
 
-            # Check PPO availability notification
-            if self.selected_agent_1_type == "ppo" or self.selected_agent_0_type == "ppo":
-                if not is_ppo_supported(layout_name):
-                    self.warning_message = f"Note: PPO is not bundled for '{layout_name}'. Will use Greedy."
+            # Check agent compatibility notification
+            self._update_compatibility_warning()
         except Exception as e:
             self.status_message = f"Error loading layout: {e}"
+
+    def _get_full_agent_options(self) -> list[tuple[str, str]]:
+        custom = get_custom_trained_agents()
+        return [
+            ("Human (Keyboard)", "human"),
+            ("PPO (Pretrained RL)", "ppo"),
+            ("BC (Human Model)", "bc"),
+            *custom,
+            ("Greedy Chef (Upstream)", "greedy"),
+            ("Random Chef", "random"),
+            ("Stay (Idle)", "stay"),
+        ]
+
+    def _refresh_agent_options(self) -> None:
+        self.agent_options = self._get_full_agent_options()
+        if hasattr(self, "dropdown_agent_0"):
+            self.dropdown_agent_0.options = self.agent_options
+        if hasattr(self, "dropdown_agent_1"):
+            self.dropdown_agent_1.options = self.agent_options
+        custom = get_custom_trained_agents()
+        train_opts = [
+            ("PPO (Pretrained RL)", "ppo"),
+            ("BC (Human Model)", "bc"),
+            *custom,
+            ("Greedy Chef", "greedy"),
+            ("Random Chef", "random"),
+        ]
+        if hasattr(self, "dropdown_train_agent_1"):
+            self.dropdown_train_agent_1.options = train_opts
+        if hasattr(self, "dropdown_train_agent_2"):
+            self.dropdown_train_agent_2.options = train_opts
+        self._refresh_matrix_widgets()
+
+    def _get_matrix_agent_options(self) -> list[tuple[str, str]]:
+        """Return list of (agent_id, display_label) for Matrix Mode benchmarks."""
+        options: list[tuple[str, str]] = [
+            ("ppo_sp", "PPO (Self-Play)"),
+            ("greedy", "Greedy Chef"),
+        ]
+        seen = {"ppo_sp", "greedy", "random"}
+
+        # Discover all trained custom agents
+        custom_agents = get_custom_trained_agents()
+        for label, val in custom_agents:
+            target_path = Path(val.split("custom:", 1)[1])
+            agent_id = target_path.name
+            if agent_id not in seen:
+                options.append((agent_id, label))
+                seen.add(agent_id)
+
+        try:
+            records = AgentDatabase.load()
+            for r in records:
+                aid = r.get("id") or r.get("name")
+                if aid and aid not in seen:
+                    name = r.get("name", aid)
+                    options.append((aid, f"PPO ({name})"))
+                    seen.add(aid)
+        except Exception:
+            pass
+
+        options.append(("random", "Random Chef"))
+        return options
+
+    def _refresh_matrix_widgets(self) -> None:
+        """Dynamically build and position Matrix benchmark checkboxes and controls."""
+        sb_x = self.game_pane_width + 16
+        sb_w = SIDEBAR_WIDTH - 32
+        cb_h = 24
+
+        agent_opts = self._get_matrix_agent_options()
+        for aid, _ in agent_opts:
+            if aid not in self.matrix_agents:
+                self.matrix_agents[aid] = (aid != "random")
+
+        # Clean up deleted agents
+        existing_aids = {aid for aid, _ in agent_opts}
+        for k in list(self.matrix_agents.keys()):
+            if k not in existing_aids:
+                self.matrix_agents.pop(k, None)
+
+        self.matrix_agent_checkboxes = {}
+        curr_y = 88 + 20
+
+        for aid, label in agent_opts:
+            short_label = label
+            if len(short_label) > 28:
+                short_label = short_label[:26] + ".."
+            cb = UICheckbox(
+                (sb_x, curr_y, sb_w, cb_h),
+                short_label,
+                checked=self.matrix_agents.get(aid, True),
+                on_change=lambda v, key=aid: self._toggle_matrix_agent(key, v),
+            )
+            self.matrix_agent_checkboxes[aid] = cb
+            curr_y += 26
+
+        self.cb_ppo = self.matrix_agent_checkboxes.get("ppo_sp")
+        self.cb_greedy = self.matrix_agent_checkboxes.get("greedy")
+        self.cb_random = self.matrix_agent_checkboxes.get("random")
+
+        curr_y += 8
+        self.matrix_levels_header_y = curr_y
+        curr_y += 20
+
+        levels_config = [
+            ("cramped_room", "Cramped Room"),
+            ("asymmetric_advantages", "Asymmetric Advantages"),
+            ("coordination_ring", "Coordination Ring"),
+            ("forced_coordination", "Forced Coordination"),
+            ("counter_circuit_o_1order", "Counter Circuit"),
+        ]
+        self.matrix_level_checkboxes = {}
+        for lid, llabel in levels_config:
+            cb = UICheckbox(
+                (sb_x, curr_y, sb_w, cb_h),
+                llabel,
+                checked=self.matrix_levels.get(lid, lid in ("cramped_room", "asymmetric_advantages")),
+                on_change=lambda v, key=lid: self._toggle_matrix_level(key, v),
+            )
+            self.matrix_level_checkboxes[lid] = cb
+            curr_y += 26
+
+        self.cb_cramped = self.matrix_level_checkboxes.get("cramped_room")
+        self.cb_asym = self.matrix_level_checkboxes.get("asymmetric_advantages")
+        self.cb_ring = self.matrix_level_checkboxes.get("coordination_ring")
+        self.cb_forced = self.matrix_level_checkboxes.get("forced_coordination")
+        self.cb_circuit = self.matrix_level_checkboxes.get("counter_circuit_o_1order")
+
+        curr_y += 8
+        self.matrix_k_header_y = curr_y
+        if hasattr(self, "btn_k_minus"):
+            self.btn_k_minus.rect = pygame.Rect(sb_x + 130, curr_y - 4, 28, 26)
+        if hasattr(self, "btn_k_plus"):
+            self.btn_k_plus.rect = pygame.Rect(sb_x + 195, curr_y - 4, 28, 26)
 
     def _setup_widgets(self) -> None:
         """Initialize sidebar switchbar, dropdowns, checkboxes, and buttons."""
@@ -253,10 +453,10 @@ class OvercookedApp:
         sb_w = SIDEBAR_WIDTH - 32
         item_h = 36
 
-        # Top Mode Switchbar (Live Match vs Matrix Test)
+        # Top Mode Switchbar (Live Game vs Matrix vs Train)
         self.switchbar = UISwitchbar(
             rect=(sb_x, 50, sb_w, 30),
-            options=[("Live Match", "live"), ("Matrix Test", "matrix")],
+            options=[("Live Game", "live"), ("Matrix", "matrix"), ("Train", "train")],
             selected_value=self.active_mode,
             on_change=self._on_mode_changed,
         )
@@ -368,56 +568,6 @@ class OvercookedApp:
         # -----------------------------
         # Matrix Test Mode Controls
         # -----------------------------
-        self.cb_ppo = UICheckbox(
-            (sb_x, 108, sb_w, 24),
-            "PPO (Self-Play)",
-            checked=self.matrix_agents.get("ppo_sp", True),
-            on_change=lambda v: self._toggle_matrix_agent("ppo_sp", v),
-        )
-        self.cb_greedy = UICheckbox(
-            (sb_x, 134, sb_w, 24),
-            "Greedy Chef",
-            checked=self.matrix_agents.get("greedy", True),
-            on_change=lambda v: self._toggle_matrix_agent("greedy", v),
-        )
-        self.cb_random = UICheckbox(
-            (sb_x, 160, sb_w, 24),
-            "Random Chef",
-            checked=self.matrix_agents.get("random", True),
-            on_change=lambda v: self._toggle_matrix_agent("random", v),
-        )
-
-        self.cb_cramped = UICheckbox(
-            (sb_x, 212, sb_w, 24),
-            "Cramped Room",
-            checked=self.matrix_levels.get("cramped_room", True),
-            on_change=lambda v: self._toggle_matrix_level("cramped_room", v),
-        )
-        self.cb_asym = UICheckbox(
-            (sb_x, 238, sb_w, 24),
-            "Asymmetric Advantages",
-            checked=self.matrix_levels.get("asymmetric_advantages", True),
-            on_change=lambda v: self._toggle_matrix_level("asymmetric_advantages", v),
-        )
-        self.cb_ring = UICheckbox(
-            (sb_x, 264, sb_w, 24),
-            "Coordination Ring",
-            checked=self.matrix_levels.get("coordination_ring", False),
-            on_change=lambda v: self._toggle_matrix_level("coordination_ring", v),
-        )
-        self.cb_forced = UICheckbox(
-            (sb_x, 290, sb_w, 24),
-            "Forced Coordination",
-            checked=self.matrix_levels.get("forced_coordination", False),
-            on_change=lambda v: self._toggle_matrix_level("forced_coordination", v),
-        )
-        self.cb_circuit = UICheckbox(
-            (sb_x, 316, sb_w, 24),
-            "Counter Circuit",
-            checked=self.matrix_levels.get("counter_circuit_o_1order", False),
-            on_change=lambda v: self._toggle_matrix_level("counter_circuit_o_1order", v),
-        )
-
         self.btn_k_minus = UIButton(
             rect=(sb_x + 130, 350, 28, 26),
             text="-",
@@ -453,14 +603,631 @@ class OvercookedApp:
             font_size=13,
             is_visible=False,
         )
+        self._refresh_matrix_widgets()
+
+        # -----------------------------
+        # Train Mode Controls (Images 1, 2, 3, 4)
+        # -----------------------------
+        self.modal_confirm = UIModalConfirm()
+
+        # Image 4: Setup Widgets
+        custom = get_custom_trained_agents()
+        train_agent_opts = [
+            ("PPO (Pretrained RL)", "ppo"),
+            ("BC (Human Model)", "bc"),
+            *custom,
+            ("Greedy Chef", "greedy"),
+            ("Random Chef", "random"),
+        ]
+        train_layout_opts = [
+            ("All Maps", "all_layouts"),
+            ("Cramped Room", "cramped_room"),
+            ("Asymmetric Advantages", "asymmetric_advantages"),
+            ("Coordination Ring", "coordination_ring"),
+            ("Forced Coordination", "forced_coordination"),
+            ("Counter Circuit", "counter_circuit_o_1order"),
+        ]
+        self.dropdown_train_layout = UIDropdown(
+            rect=(sb_x, 96, sb_w, 28),
+            options=train_layout_opts,
+            selected_value=self.train_layout,
+            on_change=self._on_train_layout_changed,
+        )
+
+        recipe_opts = [
+            ("PPO (Standard)", "ppo"),
+            ("PPO-SP (Self-Play)", "ppo_sp"),
+            ("PPO-BC (Human Model)", "ppo_bc"),
+            ("Greedy Specialist", "greedy"),
+            ("PPO 50/50 Mix (SP + Greedy)", "ppo_50_50"),
+            ("Custom Blend (Sliders)", "custom"),
+        ]
+        self.dropdown_train_recipe = UIDropdown(
+            rect=(sb_x, 150, sb_w, 28),
+            options=recipe_opts,
+            selected_value=self.train_recipe,
+            on_change=self._on_recipe_changed,
+        )
+        self.dropdown_train_agent_1 = UIDropdown(
+            rect=(sb_x, 204, sb_w, 28),
+            options=train_agent_opts,
+            selected_value=self.train_agent_1,
+            on_change=self._on_train_agent_1_changed,
+        )
+        self.slider_agent_1 = UISlider(
+            rect=(sb_x, 258, sb_w, 18),
+            value=self.train_agent_1_pct,
+            min_val=0,
+            max_val=100,
+            step=10,
+            on_change=self._on_slider_1_changed,
+        )
+        self.dropdown_train_agent_2 = UIDropdown(
+            rect=(sb_x, 326, sb_w, 28),
+            options=train_agent_opts,
+            selected_value=self.train_agent_2,
+            on_change=self._on_train_agent_2_changed,
+        )
+        self.slider_agent_2 = UISlider(
+            rect=(sb_x, 380, sb_w, 18),
+            value=self.train_agent_2_pct,
+            min_val=0,
+            max_val=100,
+            step=10,
+            on_change=self._on_slider_2_changed,
+        )
+        self.input_agent_name = UITextInput(
+            rect=(sb_x, 448, sb_w, 28),
+            text="Jeff",
+            placeholder="Agent Name",
+            on_change=lambda t: setattr(self, "train_agent_name", t),
+        )
+        self.btn_train_start = UIButton(
+            rect=(sb_x, 488, sb_w, 38),
+            text="TRAIN",
+            on_click=self._start_training,
+            bg_color=COLOR_RUN,
+            hover_color=COLOR_RUN_HOVER,
+            text_color=COLOR_RUN_TEXT,
+            font_size=15,
+        )
+        self.btn_view_all_agents = UIButton(
+            rect=(sb_x + sb_w - 120, self.window_height - 38, 120, 24),
+            text="view all agents",
+            on_click=lambda: setattr(self, "train_view", "db"),
+            font_size=11,
+            border_radius=0,
+        )
+
+        # Image 3: Active Training Widgets
+        half_train_btn_w = (sb_w - 8) // 2
+        self.btn_view_training_live = UIButton(
+            rect=(sb_x, 284, sb_w, 34),
+            text="View Training Live",
+            on_click=self._open_live_training_terminal,
+            bg_color=(235, 238, 245),
+            hover_color=(220, 225, 235),
+            text_color=(0, 0, 0),
+            font_size=13,
+        )
+        self.btn_pause_training = UIButton(
+            rect=(sb_x, 326, half_train_btn_w, 36),
+            text="Pause training",
+            on_click=self._toggle_pause_training,
+            bg_color=COLOR_PAUSE,
+            hover_color=COLOR_PAUSE_HOVER,
+            text_color=COLOR_PAUSE_TEXT,
+            font_size=13,
+        )
+        self.btn_stop_training = UIButton(
+            rect=(sb_x + half_train_btn_w + 8, 326, half_train_btn_w, 36),
+            text="Stop training",
+            on_click=self._stop_training,
+            bg_color=(245, 215, 215),
+            hover_color=(235, 195, 195),
+            text_color=(150, 20, 20),
+            font_size=13,
+        )
+
+        # Image 2: Complete Widgets
+        self.btn_view_jeff = UIButton(
+            rect=(sb_x, 298, sb_w, 36),
+            text="View Jeff Live",
+            on_click=self._view_trained_agent_live,
+            bg_color=COLOR_RUN,
+            hover_color=COLOR_RUN_HOVER,
+            text_color=COLOR_RUN_TEXT,
+            font_size=13,
+        )
+        self.btn_view_matrix = UIButton(
+            rect=(sb_x, 344, sb_w, 36),
+            text="View in Matrix Benchmark",
+            on_click=self._view_trained_agent_matrix,
+            bg_color=(230, 240, 255),
+            hover_color=(210, 230, 255),
+            text_color=(20, 60, 160),
+            font_size=13,
+        )
+        self.btn_view_agent_db = UIButton(
+            rect=(sb_x, 390, sb_w, 36),
+            text="View Agent DB",
+            on_click=lambda: setattr(self, "train_view", "db"),
+            font_size=13,
+        )
+
+        # Image 1: Database Widgets
+        self.input_search_agent = UITextInput(
+            rect=(sb_x + 95, 114, sb_w - 95, 28),
+            text="",
+            placeholder="Search...",
+        )
+        self.btn_back_to_train = UIButton(
+            rect=(sb_x, self.window_height - 38, sb_w, 28),
+            text="< Back to Train",
+            on_click=lambda: setattr(self, "train_view", "setup"),
+            font_size=12,
+        )
+
+    def _on_train_layout_changed(self, new_layout: str) -> None:
+        self.train_layout = new_layout
+        if new_layout != "all_layouts" and new_layout in self.available_layouts:
+            self._load_environment(new_layout)
+        total_it = 5 * self.train_iters if new_layout in ("all", "all_layouts", "all_maps") else self.train_iters
+        self.train_progress_total = total_it
+
+
+    def _on_recipe_changed(self, new_recipe: str) -> None:
+        self.train_recipe = new_recipe
+        if new_recipe in ("ppo", "ppo_sp"):
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 100
+            self.slider_agent_1.value = 100
+
+            self.train_agent_2 = "ppo"
+            self.dropdown_train_agent_2.selected_value = "ppo"
+            self.train_agent_2_pct = 0
+            self.slider_agent_2.value = 0
+
+        elif new_recipe in ("ppo_bc", "bc"):
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 50
+            self.slider_agent_1.value = 50
+
+            self.train_agent_2 = "bc"
+            self.dropdown_train_agent_2.selected_value = "bc"
+            self.train_agent_2_pct = 50
+            self.slider_agent_2.value = 50
+
+        elif new_recipe in ("greedy", "ppo_greedy"):
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 0
+            self.slider_agent_1.value = 0
+
+            self.train_agent_2 = "greedy"
+            self.dropdown_train_agent_2.selected_value = "greedy"
+            self.train_agent_2_pct = 100
+            self.slider_agent_2.value = 100
+
+        elif new_recipe == "ppo_50_50":
+            self.train_agent_1 = "ppo"
+            self.dropdown_train_agent_1.selected_value = "ppo"
+            self.train_agent_1_pct = 50
+            self.slider_agent_1.value = 50
+
+            self.train_agent_2 = "greedy"
+            self.dropdown_train_agent_2.selected_value = "greedy"
+            self.train_agent_2_pct = 50
+            self.slider_agent_2.value = 50
+
+    def _on_train_agent_1_changed(self, new_val: str) -> None:
+        self.train_agent_1 = new_val
+        self._sync_recipe_from_agents()
+
+    def _on_train_agent_2_changed(self, new_val: str) -> None:
+        self.train_agent_2 = new_val
+        self._sync_recipe_from_agents()
+
+    def _on_slider_1_changed(self, new_val: int) -> None:
+        self.train_agent_1_pct = new_val
+        self._sync_recipe_from_agents()
+
+    def _on_slider_2_changed(self, new_val: int) -> None:
+        self.train_agent_2_pct = new_val
+        self._sync_recipe_from_agents()
+
+    def _sync_recipe_from_agents(self) -> None:
+        a1 = self.train_agent_1
+        a2 = self.train_agent_2
+        s1 = self.train_agent_1_pct
+        s2 = self.train_agent_2_pct
+
+        if a1 == "ppo" and a2 == "ppo":
+            matched = "ppo" if self.train_recipe == "ppo" else "ppo_sp"
+        elif a1 == "ppo" and a2 == "bc" and s1 == 50 and s2 == 50:
+            matched = "ppo_bc"
+        elif (a1 == "ppo" and a2 == "greedy" and s1 == 0 and s2 == 100) or (a1 == "greedy" and a2 == "ppo" and s1 == 100 and s2 == 0):
+            matched = "greedy" if self.train_recipe == "greedy" else "ppo_greedy"
+        elif a1 == "ppo" and a2 == "greedy" and s1 == 50 and s2 == 50:
+            matched = "ppo_50_50"
+        else:
+            matched = "custom"
+
+        self.train_recipe = matched
+        if hasattr(self, "dropdown_train_recipe"):
+            self.dropdown_train_recipe.selected_value = matched
+
+    def _start_training(self) -> None:
+        agent_name = self.train_agent_name.strip() or "Jeff"
+        self.train_last_trained_name = agent_name
+        self.btn_view_jeff.text = f"View {agent_name}"
+
+        # Determine partner type and prob
+        recipe = self.train_recipe
+        partner_type = "greedy"
+        partner_prob = 0.5
+
+        if recipe in ("ppo", "ppo_sp"):
+            partner_type = "ppo"
+            partner_prob = 0.0
+        elif recipe in ("ppo_bc", "bc"):
+            partner_type = "bc"
+            partner_prob = 0.5
+        elif recipe in ("greedy", "ppo_greedy"):
+            partner_type = "greedy"
+            partner_prob = 1.0
+        elif recipe == "ppo_50_50":
+            partner_type = "greedy"
+            partner_prob = 0.5
+        else:
+            # Custom blend based on selected agents and sliders
+            a1 = self.train_agent_1
+            a2 = self.train_agent_2
+            s1 = self.train_agent_1_pct
+            s2 = self.train_agent_2_pct
+
+            if a2 in ("bc", "greedy", "random"):
+                partner_type = a2
+                total = max(1, s1 + s2)
+                partner_prob = round(s2 / total, 2)
+            elif a1 in ("bc", "greedy", "random") and a2 == "ppo":
+                partner_type = a1
+                total = max(1, s1 + s2)
+                partner_prob = round(s1 / total, 2)
+            elif a1 == "ppo" and a2 == "ppo":
+                partner_type = "ppo"
+                partner_prob = 0.0
+            else:
+                partner_type = "greedy"
+                partner_prob = round(s2 / max(1, s1 + s2), 2)
+
+        out_dir = REPO_ROOT / "models" / agent_name
+        venv_python = AGENT_EVAL_DIR / ".venv" / "bin" / "python"
+        python_bin = str(venv_python) if venv_python.is_file() else sys.executable
+        iters_per_layout = getattr(self, "train_iters", 650)
+        target_layout = getattr(self, "train_layout", "all_layouts")
+        cmd = [
+            python_bin,
+            "-u",
+            "-m", "training.train_agent",
+            "--recipe", recipe,
+            "--partner-type", partner_type,
+            "--partner-prob", str(partner_prob),
+            "--layout", target_layout,
+            "--iters", str(iters_per_layout),
+            "--out-dir", str(out_dir),
+        ]
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        if status_file.is_file():
+            try:
+                status_file.unlink()
+            except Exception:
+                pass
+
+        if hasattr(self, "train_log_file") and self.train_log_file is not None:
+            try:
+                self.train_log_file.close()
+            except Exception:
+                pass
+            self.train_log_file = None
+
+        log_path = REPO_ROOT / "results" / "training_live.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.train_log_file = open(log_path, "w", buffering=1, encoding="utf-8")
+
+        env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
+
+        self.train_process = subprocess.Popen(
+            cmd,
+            cwd=str(REPO_ROOT),
+            stdout=self.train_log_file,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+        self.train_is_paused = False
+        self.btn_pause_training.text = "Pause training"
+        self.btn_pause_training.bg_color = COLOR_PAUSE
+        self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
+        self.train_view = "active"
+        self.train_progress_cur = 0
+        if target_layout in ("all", "all_layouts", "all_maps"):
+            total_it = 5 * iters_per_layout
+        else:
+            total_it = iters_per_layout
+        self.train_progress_total = total_it
+        initial_eta = total_it * 2  # Baseline estimate (~2s per iteration with 4 rollout workers)
+        self.train_eta_seconds = initial_eta
+        self.train_eta_str = self._format_eta(initial_eta)
+        self.train_last_poll_time = time.time()
+
+    @staticmethod
+    def _format_eta(total_seconds: int) -> str:
+        s = max(0, int(total_seconds))
+        hrs = s // 3600
+        mins = (s % 3600) // 60
+        secs = s % 60
+        if hrs > 0:
+            return f"{hrs}hr {mins:02d}min"
+        elif mins > 0:
+            return f"{mins}min {secs:02d}s"
+        else:
+            return f"{secs}s"
+
+    def _open_live_training_terminal(self) -> None:
+        log_file = REPO_ROOT / "results" / "training_live.log"
+        if not log_file.exists():
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            log_file.write_text("Waiting for training process output...\n", encoding="utf-8")
+        escaped_path = str(log_file.resolve()).replace("'", "\\'")
+        cmd_script = f"clear; echo 'Streaming live training logs ({log_file.name})...'; tail -f '{escaped_path}'"
+        apple_script = f'tell application "Terminal" to do script "{cmd_script}"\ntell application "Terminal" to activate'
+        try:
+            subprocess.Popen(["osascript", "-e", apple_script])
+        except Exception as e:
+            print(f"[GUI] Failed to open live terminal: {e}")
+
+    def _toggle_pause_training(self) -> None:
+        if not self.train_process or self.train_process.poll() is not None:
+            return
+
+        if not self.train_is_paused:
+            try:
+                os.kill(self.train_process.pid, signal.SIGSTOP)
+                self.train_is_paused = True
+                self.btn_pause_training.text = "Resume training"
+                self.btn_pause_training.bg_color = (210, 245, 220)
+                self.btn_pause_training.hover_color = (190, 235, 205)
+            except Exception as e:
+                print(f"[GUI] Error pausing training: {e}")
+        else:
+            try:
+                os.kill(self.train_process.pid, signal.SIGCONT)
+                self.train_is_paused = False
+                self.train_last_poll_time = time.time()
+                self.btn_pause_training.text = "Pause training"
+                self.btn_pause_training.bg_color = COLOR_PAUSE
+                self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
+            except Exception as e:
+                print(f"[GUI] Error resuming training: {e}")
+
+    def _stop_training(self) -> None:
+        if self.train_process and self.train_process.poll() is None:
+            if self.train_is_paused:
+                try:
+                    os.kill(self.train_process.pid, signal.SIGCONT)
+                except Exception:
+                    pass
+            try:
+                self.train_process.terminate()
+                self.train_process.wait(timeout=2)
+            except Exception:
+                try:
+                    self.train_process.kill()
+                except Exception:
+                    pass
+        self.train_process = None
+        self.train_is_paused = False
+        if hasattr(self, "train_log_file") and self.train_log_file is not None:
+            try:
+                self.train_log_file.close()
+            except Exception:
+                pass
+            self.train_log_file = None
+        self.btn_pause_training.text = "Pause training"
+        self.btn_pause_training.bg_color = COLOR_PAUSE
+        self.btn_pause_training.hover_color = COLOR_PAUSE_HOVER
+        self.train_view = "setup"
+
+    def _poll_training_progress(self) -> None:
+        now = time.time()
+
+        if self.train_is_paused:
+            self.train_last_poll_time = now
+
+        status_file = REPO_ROOT / "results" / "training_status.json"
+
+        if status_file.is_file():
+            try:
+                file_age = now - status_file.stat().st_mtime
+                is_fresh = (file_age < 120.0) or (self.train_process is not None and self.train_process.poll() is None)
+
+                if is_fresh:
+                    with open(status_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+
+                    st = data.get("status")
+                    if st == "training":
+                        self.train_progress_cur = data.get("current_iter", 0)
+                        self.train_progress_total = data.get("total_iters", getattr(self, "train_progress_total", 3250))
+                        self.train_reward_mean = data.get("reward_mean", 0.0)
+                        self.train_current_layout = data.get("current_layout", self.train_layout)
+                        self.train_recipe = data.get("recipe", getattr(self, "train_recipe", "greedy"))
+                        self.train_layout_index = data.get("layout_index", 1)
+                        self.train_total_layouts = data.get("total_layouts", 5)
+                        self.train_layout_iter = data.get("layout_iter", self.train_progress_cur)
+                        self.train_layout_total_iters = data.get("layout_total_iters", 650)
+
+                        # Sync kitchen environment preview to current layout being trained
+                        if (
+                            self.active_mode == "train"
+                            and self.train_current_layout
+                            and self.train_current_layout != self.current_layout
+                        ):
+                            try:
+                                self._load_environment(self.train_current_layout)
+                            except Exception:
+                                pass
+
+                        name_from_data = data.get("agent_name")
+                        if not name_from_data:
+                            if self.train_recipe == "greedy":
+                                name_from_data = "ppo_greedy"
+                            elif self.train_recipe == "ppo_50_50":
+                                name_from_data = "ppo_v_greedy"
+                            else:
+                                name_from_data = getattr(self, "train_last_trained_name", "Trained_Agent")
+                        self.train_last_trained_name = name_from_data
+                        if hasattr(self, "btn_view_jeff"):
+                            self.btn_view_jeff.text = f"View {self.train_last_trained_name} Live"
+
+                        eta_sec = data.get("eta_seconds", None)
+                        if eta_sec is not None:
+                            self.train_eta_seconds = max(0, int(eta_sec))
+                            self.train_last_poll_time = now
+
+                        # Dynamic tab percentage on switchbar
+                        pct = int(round((self.train_progress_cur / max(1, self.train_progress_total)) * 100))
+                        if hasattr(self, "switchbar") and len(self.switchbar.options) >= 3:
+                            self.switchbar.options[2] = (f"Train ({pct}%)", "train")
+
+                        # If user is viewing the Train tab and in setup view, automatically show active view!
+                        if self.active_mode == "train" and self.train_view == "setup":
+                            self.train_view = "active"
+
+                    elif st == "completed" and self.train_view == "active":
+                        self.train_eta_seconds = 0
+                        self.train_eta_str = "0s"
+                        model_dir = REPO_ROOT / "models" / self.train_last_trained_name
+                        registered_layout = data.get("layout", getattr(self, "train_layout", "all_layouts"))
+                        AgentDatabase.add_agent(
+                            name=self.train_last_trained_name,
+                            layout=registered_layout,
+                            checkpoint_path=model_dir,
+                            agent_1=self.train_agent_1,
+                            agent_1_pct=self.train_agent_1_pct,
+                            agent_2=self.train_agent_2,
+                            agent_2_pct=self.train_agent_2_pct,
+                            reward_mean=self.train_reward_mean,
+                        )
+                        self._refresh_agent_options()
+                        self.train_view = "complete"
+                        self.train_process = None
+                        self.train_is_paused = False
+                        if hasattr(self, "train_log_file") and self.train_log_file is not None:
+                            try:
+                                self.train_log_file.close()
+                            except Exception:
+                                pass
+                            self.train_log_file = None
+                        if hasattr(self, "switchbar") and len(self.switchbar.options) >= 3:
+                            self.switchbar.options[2] = ("Train", "train")
+                        return
+                else:
+                    if hasattr(self, "switchbar") and len(self.switchbar.options) >= 3:
+                        self.switchbar.options[2] = ("Train", "train")
+            except Exception:
+                pass
+
+        if self.train_process and self.train_process.poll() is not None:
+            ret = self.train_process.poll()
+            if ret != 0:
+                print(f"[GUI] Training process exited unexpectedly with code {ret}.")
+                self.train_process = None
+                self.train_is_paused = False
+                if hasattr(self, "train_log_file") and self.train_log_file is not None:
+                    try:
+                        self.train_log_file.close()
+                    except Exception:
+                        pass
+                    self.train_log_file = None
+                self.train_view = "setup"
+                return
+
+        # Calculate smooth countdown between iteration updates
+        if hasattr(self, "train_last_poll_time") and self.train_last_poll_time > 0 and not self.train_is_paused:
+            elapsed_since_poll = now - self.train_last_poll_time
+            current_eta = max(0, int(self.train_eta_seconds - elapsed_since_poll))
+        else:
+            current_eta = self.train_eta_seconds
+
+        self.train_eta_str = self._format_eta(current_eta)
+
+    def _view_trained_agent_live(self) -> None:
+        self._refresh_agent_options()
+        self.active_mode = "live"
+        self.switchbar.selected_value = "live"
+        target = self.train_last_trained_name.lower()
+        for label, val in self.agent_options:
+            if target in label.lower() or val.endswith(target):
+                self.selected_agent_0_type = val
+                self.dropdown_agent_0.selected_value = val
+                break
+        self.selected_agent_1_type = "greedy"
+        self.dropdown_agent_1.selected_value = "greedy"
+        self.reset_simulation()
+        self.start_or_resume()
+
+    def _view_trained_agent_matrix(self) -> None:
+        self._refresh_agent_options()
+        self.active_mode = "matrix"
+        self.switchbar.selected_value = "matrix"
+        target = self.train_last_trained_name.lower()
+        for k in self.matrix_agents:
+            if target in k.lower():
+                self.matrix_agents[k] = True
+                if hasattr(self, "matrix_agent_checkboxes") and k in self.matrix_agent_checkboxes:
+                    self.matrix_agent_checkboxes[k].checked = True
+
+    def _confirm_delete_agent(self, agent_id: str, agent_name: str) -> None:
+        self.modal_confirm.show(
+            title="Are you Sure?",
+            message=f"Delete agent '{agent_name}'?",
+            on_confirm=lambda: self._execute_delete_agent(agent_id),
+        )
+
+    def _execute_delete_agent(self, agent_id: str) -> None:
+        AgentDatabase.delete_agent(agent_id)
+        evict_trainer_cache(agent_id)
+        self._refresh_agent_options()
+
+    def _update_compatibility_warning(self) -> None:
+        """Update warning_message based on whether selected agents support current_layout."""
+        warns = []
+        for idx, agent_t in enumerate((self.selected_agent_0_type, self.selected_agent_1_type)):
+            agent_lower = agent_t.lower().strip()
+            if agent_lower in ("ppo", "ppo (self-play)", "ppo_sp"):
+                if not is_ppo_supported(self.current_layout):
+                    warns.append(f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy.")
+            elif agent_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning"):
+                if not is_ppo_supported(self.current_layout):
+                    warns.append(f"Note: BC is not bundled for '{self.current_layout}'. Will use Greedy.")
+            elif agent_t.startswith("custom:"):
+                model_path = Path(agent_t[len("custom:"):])
+                layout_target_dir = model_path / self.current_layout
+                has_layout_ckpt = layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*"))
+                has_direct_ckpt = any(model_path.glob("checkpoint_*"))
+                if not has_layout_ckpt and not has_direct_ckpt:
+                    warns.append(f"Note: '{model_path.name}' has no checkpoint for '{self.current_layout}'. Will use Greedy.")
+        self.warning_message = " | ".join(warns) if warns else None
 
     def _on_agent_0_changed(self, new_val: str) -> None:
         if self.is_mid_run:
             return  # Locked mid-run
         self.selected_agent_0_type = new_val
-        self.warning_message = None
-        if new_val == "ppo" and not is_ppo_supported(self.current_layout):
-            self.warning_message = f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy."
+        self._update_compatibility_warning()
         if self.state == AppState.DONE:
             self.state = AppState.SETUP
             self.btn_view_graph.is_visible = False
@@ -469,9 +1236,7 @@ class OvercookedApp:
         if self.is_mid_run:
             return  # Locked mid-run
         self.selected_agent_1_type = new_val
-        self.warning_message = None
-        if new_val == "ppo" and not is_ppo_supported(self.current_layout):
-            self.warning_message = f"Note: PPO is not bundled for '{self.current_layout}'. Will use Greedy."
+        self._update_compatibility_warning()
         if self.state == AppState.DONE:
             self.state = AppState.SETUP
             self.btn_view_graph.is_visible = False
@@ -482,6 +1247,7 @@ class OvercookedApp:
             return  # Locked mid-run
         print(f"[GUI] Layout changed live to: {new_layout}")
         self._load_environment(new_layout)
+        self._update_compatibility_warning()
         if self.state == AppState.DONE:
             self.state = AppState.SETUP
             self.btn_view_graph.is_visible = False
@@ -498,7 +1264,7 @@ class OvercookedApp:
         self._load_environment(self.current_layout)
         self.state = AppState.SETUP
         self.status_message = "Ready. Select agents & layout, then click RUN!"
-        self.warning_message = None
+        self._update_compatibility_warning()
         self.btn_view_graph.is_visible = False
         print("[GUI] Reset to SETUP mode.")
 
@@ -508,34 +1274,47 @@ class OvercookedApp:
             return
 
         print(f"[GUI] Starting episode on {self.current_layout} (Agent 0: {self.selected_agent_0_type}, Agent 1: {self.selected_agent_1_type})")
-        if self.selected_agent_0_type == "ppo" or self.selected_agent_1_type == "ppo":
-            self.status_message = "Loading PPO neural network weights..."
+        if (
+            "ppo" in self.selected_agent_0_type.lower()
+            or "ppo" in self.selected_agent_1_type.lower()
+            or "custom" in self.selected_agent_0_type.lower()
+            or "custom" in self.selected_agent_1_type.lower()
+        ):
+            self.status_message = "Loading neural network weights..."
         else:
             self.status_message = "Initializing agents..."
         self._draw_frame()
 
-        # Reset environment
-        self.env.reset()
-        self.step_count = 0
-        self.cumulative_score = 0.0
-        self.recorded_rows.clear()
-        self.history.clear()
+        try:
+            # Reset environment
+            self.env.reset()
+            self.step_count = 0
+            self.cumulative_score = 0.0
+            self.recorded_rows.clear()
+            self.history.clear()
 
-        # Save initial state in history
-        import copy
-        self.history.append((copy.deepcopy(self.env.state), 0, 0.0, []))
+            # Save initial state in history
+            import copy
+            self.history.append((copy.deepcopy(self.env.state), 0, 0.0, []))
 
-        # Instantiate agents
-        a0, warn0 = create_agent(self.selected_agent_0_type, 0, self.mdp, self.current_layout)
-        a1, warn1 = create_agent(self.selected_agent_1_type, 1, self.mdp, self.current_layout)
-        self.agents = [a0, a1]
+            # Instantiate agents
+            a0, warn0 = create_agent(self.selected_agent_0_type, 0, self.mdp, self.current_layout)
+            a1, warn1 = create_agent(self.selected_agent_1_type, 1, self.mdp, self.current_layout)
+            self.agents = [a0, a1]
 
-        if warn0 or warn1:
-            self.warning_message = warn0 or warn1
+            warnings = [w for w in (warn0, warn1) if w]
+            if warnings:
+                self.warning_message = " | ".join(warnings)
+                print(f"[GUI Warning] {self.warning_message}")
 
-        self.state = AppState.RUNNING
-        self.status_message = f"Playing {self.current_layout} ({self.fps} FPS)!"
-        self.btn_view_graph.is_visible = False
+            self.state = AppState.RUNNING
+            self.status_message = f"Playing {self.current_layout} ({self.fps} FPS)!"
+            self.btn_view_graph.is_visible = False
+        except Exception as e:
+            self.state = AppState.SETUP
+            self.warning_message = f"Failed to start episode: {e}"
+            self.status_message = f"Error: {e}"
+            print(f"[GUI Error] Failed to start episode: {e}")
 
     def toggle_pause(self) -> None:
         """Toggle simulation pause state."""
@@ -642,6 +1421,17 @@ class OvercookedApp:
 
     def _on_mode_changed(self, new_mode: str) -> None:
         self.active_mode = new_mode
+        if new_mode == "train":
+            status_file = REPO_ROOT / "results" / "training_status.json"
+            if status_file.is_file():
+                try:
+                    if (time.time() - status_file.stat().st_mtime) < 120.0:
+                        with open(status_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        if data.get("status") == "training" and self.train_view != "db":
+                            self.train_view = "active"
+                except Exception:
+                    pass
 
     def _toggle_matrix_agent(self, key: str, val: bool) -> None:
         self.matrix_agents[key] = val
@@ -809,7 +1599,14 @@ class OvercookedApp:
             self.history.pop(0)
 
         state = self.env.state
-        joint_action = tuple(agent.action(state)[0] for agent in self.agents)
+        try:
+            joint_action = tuple(agent.action(state)[0] for agent in self.agents)
+        except Exception as e:
+            print(f"[GUI Error] Agent step action failed at step {self.step_count}: {e}")
+            self.state = AppState.PAUSED
+            self.warning_message = f"Simulation paused: Agent error: {e}"
+            self.status_message = f"Error at step {self.step_count}: {e}"
+            return
 
         next_state, sparse_reward, done, info = self.env.step(joint_action)
         self.cumulative_score += sparse_reward
@@ -848,6 +1645,11 @@ class OvercookedApp:
             if event.type == pygame.QUIT:
                 self.running = False
                 return
+
+            # Modal confirmation dialog intercepts all events if visible
+            if hasattr(self, "modal_confirm") and self.modal_confirm.is_visible:
+                if self.modal_confirm.handle_event(event):
+                    continue
 
             elif event.type == pygame.VIDEORESIZE:
                 self.window_width = max(900, event.w)
@@ -976,20 +1778,86 @@ class OvercookedApp:
 
             elif self.active_mode == "matrix":
                 if not self.matrix_running:
-                    self.cb_ppo.handle_event(event)
-                    self.cb_greedy.handle_event(event)
-                    self.cb_random.handle_event(event)
-                    self.cb_cramped.handle_event(event)
-                    self.cb_asym.handle_event(event)
-                    self.cb_ring.handle_event(event)
-                    self.cb_forced.handle_event(event)
-                    self.cb_circuit.handle_event(event)
+                    if hasattr(self, "matrix_agent_checkboxes"):
+                        for cb in self.matrix_agent_checkboxes.values():
+                            if cb is not None:
+                                cb.handle_event(event)
+                    if hasattr(self, "matrix_level_checkboxes"):
+                        for cb in self.matrix_level_checkboxes.values():
+                            if cb is not None:
+                                cb.handle_event(event)
                     self.btn_k_minus.handle_event(event)
                     self.btn_k_plus.handle_event(event)
                     self.btn_run_matrix.handle_event(event)
 
                 if self.matrix_done and not self.matrix_running:
                     self.btn_matrix_view_graphs.handle_event(event)
+
+            elif self.active_mode == "train":
+                self._handle_train_events(event)
+
+    def _handle_train_events(self, event: pygame.event.Event) -> None:
+        if self.train_view == "setup":
+            dropdowns = [
+                self.dropdown_train_layout,
+                self.dropdown_train_recipe,
+                self.dropdown_train_agent_1,
+                self.dropdown_train_agent_2,
+            ]
+            open_dd = next((dd for dd in dropdowns if dd.is_open), None)
+            if open_dd is not None:
+                if open_dd.handle_event(event):
+                    return
+            for dd in dropdowns:
+                if dd is not open_dd and dd.handle_event(event):
+                    return
+
+            if self.slider_agent_1.handle_event(event):
+                return
+            if self.slider_agent_2.handle_event(event):
+                return
+            if self.input_agent_name.handle_event(event):
+                return
+            if self.btn_train_start.handle_event(event):
+                return
+            if self.btn_view_all_agents.handle_event(event):
+                return
+
+        elif self.train_view == "active":
+            if self.btn_view_training_live.handle_event(event):
+                return
+            if self.btn_pause_training.handle_event(event):
+                return
+            if self.btn_stop_training.handle_event(event):
+                return
+            if self.btn_view_all_agents.handle_event(event):
+                return
+
+        elif self.train_view == "complete":
+            if self.btn_view_jeff.handle_event(event):
+                return
+            if hasattr(self, "btn_view_matrix") and self.btn_view_matrix.handle_event(event):
+                return
+            if self.btn_view_agent_db.handle_event(event):
+                return
+
+        elif self.train_view == "db":
+            if self.input_search_agent.handle_event(event):
+                return
+            if self.btn_back_to_train.handle_event(event):
+                return
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                sb_x = self.game_pane_width + 16
+                sb_w = SIDEBAR_WIDTH - 32
+                table_y = 156
+                records = AgentDatabase.search(self.input_search_agent.text)
+                for i, r in enumerate(records[:12]):
+                    ry = table_y + 25 + i * 24
+                    del_rect = pygame.Rect(sb_x + sb_w - 32, ry + 2, 26, 20)
+                    if del_rect.collidepoint(event.pos):
+                        self._confirm_delete_agent(r["id"], r.get("name", "agent"))
+                        return
 
     def _draw_frame(self) -> None:
         """Render the complete application frame with full-sized environment and clean sidebar."""
@@ -1002,8 +1870,8 @@ class OvercookedApp:
             self.window, BG_GAME_FRAME, (0, 0, self.game_pane_width, self.window_height)
         )
 
-        if self.active_mode == "live":
-            # Live environment visualization
+        if self.active_mode in ("live", "train"):
+            # Live environment visualization or training layout preview
             if self.env is not None and self.visualizer is not None:
                 game_surface = self.visualizer.render_state(
                     self.env.state, self.env.mdp.terrain_mtx
@@ -1013,7 +1881,7 @@ class OvercookedApp:
                 orig_w, orig_h = game_surface.get_size()
                 pad = 24
                 avail_w = max(10, self.game_pane_width - pad * 2)
-                avail_h = max(10, self.window_height - pad * 2)
+                avail_h = max(10, self.window_height - pad * 2 - (50 if self.active_mode == "train" else 0))
                 scale = min(avail_w / orig_w, avail_h / orig_h)
                 new_w = max(1, int(orig_w * scale))
                 new_h = max(1, int(orig_h * scale))
@@ -1026,8 +1894,30 @@ class OvercookedApp:
 
                 # Center the kitchen inside the left canvas frame
                 offset_x = (self.game_pane_width - new_w) // 2
-                offset_y = (self.window_height - new_h) // 2
+                offset_y = (self.window_height - new_h) // 2 + (20 if self.active_mode == "train" else 0)
                 self.window.blit(scaled_surface, (offset_x, offset_y))
+
+                if self.active_mode == "train":
+                    banner_w = min(480, self.game_pane_width - 40)
+                    banner_rect = pygame.Rect((self.game_pane_width - banner_w) // 2, 16, banner_w, 32)
+                    if self.train_view == "active":
+                        cur_l = getattr(self, "train_current_layout", self.train_layout)
+                        l_idx = getattr(self, "train_layout_index", 1)
+                        tot_l = getattr(self, "train_total_layouts", 5)
+                        l_iter = getattr(self, "train_layout_iter", self.train_progress_cur)
+                        l_tot_iter = getattr(self, "train_layout_total_iters", 650)
+                        agent_idx_str = "1/2" if "ppo_greedy" in self.train_last_trained_name or self.train_recipe == "greedy" else "2/2"
+                        banner_w = min(560, self.game_pane_width - 40)
+                        banner_rect = pygame.Rect((self.game_pane_width - banner_w) // 2, 16, banner_w, 32)
+                        b_text = f"TRAINING [{agent_idx_str}]: {self.train_last_trained_name.upper()} | MAP [{l_idx}/{tot_l}]: {cur_l.upper()} ({l_iter}/{l_tot_iter} iters)"
+                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=(254, 226, 226), text_color=(220, 38, 38), font_size=11, bold=True)
+                    elif self.train_view == "complete":
+                        b_text = f"TRAINED: {self.train_last_trained_name.upper()} READY TO TEST"
+                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=(220, 252, 231), text_color=(22, 101, 52), font_size=12, bold=True)
+                    else:
+                        tgt = "ALL 5 BENCHMARK MAPS" if self.train_layout in ("all", "all_layouts", "all_maps") else self.train_layout.upper()
+                        b_text = f"TRAINING TARGET: {tgt}"
+                        UIBanner.draw(self.window, banner_rect, b_text, bg_color=BG_CARD_ALT, text_color=TEXT_PRIMARY, font_size=12, bold=True)
 
         elif self.active_mode == "matrix":
             # Matrix Benchmark Dashboard Canvas in RetroUI Style
@@ -1286,25 +2176,27 @@ class OvercookedApp:
 
             # Agents Section
             self.window.blit(f_sec.render("AGENTS TO BENCHMARK", True, TEXT_PRIMARY), (sb_x, 88))
-            self.cb_ppo.draw(self.window)
-            self.cb_greedy.draw(self.window)
-            self.cb_random.draw(self.window)
+            if hasattr(self, "matrix_agent_checkboxes"):
+                for cb in self.matrix_agent_checkboxes.values():
+                    if cb is not None:
+                        cb.draw(self.window)
 
             # Levels Section
-            self.window.blit(f_sec.render("LEVELS TO INCLUDE", True, TEXT_PRIMARY), (sb_x, 188))
-            self.cb_cramped.draw(self.window)
-            self.cb_asym.draw(self.window)
-            self.cb_ring.draw(self.window)
-            self.cb_forced.draw(self.window)
-            self.cb_circuit.draw(self.window)
+            levels_y = getattr(self, "matrix_levels_header_y", 188)
+            self.window.blit(f_sec.render("LEVELS TO INCLUDE", True, TEXT_PRIMARY), (sb_x, levels_y))
+            if hasattr(self, "matrix_level_checkboxes"):
+                for cb in self.matrix_level_checkboxes.values():
+                    if cb is not None:
+                        cb.draw(self.window)
 
             # K Stepper Section
-            self.window.blit(f_sec.render("TRIALS / PAIR (K)", True, TEXT_PRIMARY), (sb_x, 355))
+            k_y = getattr(self, "matrix_k_header_y", 355)
+            self.window.blit(f_sec.render("TRIALS / PAIR (K)", True, TEXT_PRIMARY), (sb_x, k_y))
             self.btn_k_minus.draw(self.window)
             f_k = FontManager.get_mono_font(15, bold=True)
             k_surf = f_k.render(str(self.matrix_k), True, TEXT_PRIMARY)
             k_x = (sb_x + 130 + 28) + (195 - (130 + 28) - k_surf.get_width()) // 2
-            self.window.blit(k_surf, (k_x, 354))
+            self.window.blit(k_surf, (k_x, k_y))
             self.btn_k_plus.draw(self.window)
 
             # Matrix Benchmark Buttons
@@ -1340,14 +2232,279 @@ class OvercookedApp:
                 self.btn_run_matrix.rect = pygame.Rect(sb_x, btn_y, sb_w, 44)
                 self.btn_run_matrix.draw(self.window)
 
+        elif self.active_mode == "train":
+            self._draw_train_mode(sb_x, sb_w)
+
         # ----------------------------------------------------
         # 3. Floating Overlay Pass (Draw open dropdown popups on top in Live Mode)
         # ----------------------------------------------------
         if self.active_mode == "live" and not self.is_mid_run:
             for dd in (self.dropdown_layout, self.dropdown_agent_1, self.dropdown_agent_0):
                 dd.draw_overlay(self.window)
+        elif self.active_mode == "train" and self.train_view == "setup":
+            for dd in (self.dropdown_train_agent_2, self.dropdown_train_agent_1, self.dropdown_train_recipe, self.dropdown_train_layout):
+                dd.draw_overlay(self.window)
+
+        # Modal Confirmation (Draws on top of everything when visible)
+        if hasattr(self, "modal_confirm") and self.modal_confirm.is_visible:
+            self.modal_confirm.draw(self.window)
 
         pygame.display.flip()
+
+    def get_recipe_info(self) -> dict[str, str]:
+        """Return the dictionary containing title and description for the current recipe."""
+        return RECIPE_INFO.get(
+            self.train_recipe,
+            {
+                "title": f"Recipe ({self.train_recipe})",
+                "desc": "Custom partner allocation via sliders",
+            },
+        )
+
+    def _draw_recipe_info_card(self, sb_x: int, sb_w: int, card_y: int) -> None:
+        """Render recipe explanation card at the bottom of the training sidebar."""
+        info = self.get_recipe_info()
+        title_text = info["title"]
+        desc_text = info["desc"]
+
+        card_h = 88
+        card_rect = pygame.Rect(sb_x, card_y, sb_w, card_h)
+        UICard.draw(
+            self.window,
+            card_rect,
+            bg_color=(255, 255, 255),
+            border_color=BORDER_BLACK,
+            shadow_offset=2,
+        )
+
+        f_tag = FontManager.get_font(9, bold=True)
+        tag_surf = f_tag.render("RECIPE INFO:", True, TEXT_MUTED)
+        self.window.blit(tag_surf, (sb_x + 10, card_y + 8))
+
+        f_title = FontManager.get_font(11, bold=True)
+        title_surf = f_title.render(title_text, True, TEXT_PRIMARY)
+        self.window.blit(title_surf, (sb_x + 10, card_y + 24))
+
+        f_desc = FontManager.get_font(11, bold=False)
+        max_text_w = sb_w - 20
+        words = desc_text.split(" ")
+        lines: list[str] = []
+        curr_line: list[str] = []
+        for w in words:
+            test_line = " ".join(curr_line + [w])
+            if f_desc.size(test_line)[0] <= max_text_w:
+                curr_line.append(w)
+            else:
+                if curr_line:
+                    lines.append(" ".join(curr_line))
+                curr_line = [w]
+        if curr_line:
+            lines.append(" ".join(curr_line))
+
+        line_y = card_y + 44
+        for line in lines[:2]:
+            l_surf = f_desc.render(line, True, TEXT_SECONDARY)
+            self.window.blit(l_surf, (sb_x + 10, line_y))
+            line_y += 16
+
+    def _draw_train_mode(self, sb_x: int, sb_w: int) -> None:
+        """Render the 4 Train Mode views matching wireframe drawings."""
+        f_sec = FontManager.get_font(12, bold=True)
+        f_lbl = FontManager.get_font(11, bold=False)
+        f_title = FontManager.get_font(14, bold=True)
+
+        if self.train_view == "setup":
+            # Training layout selector
+            self.window.blit(f_sec.render("training layout / map:", True, TEXT_PRIMARY), (sb_x, 80))
+            self.dropdown_train_layout.draw(self.window)
+
+            # Recipe Selector
+            self.window.blit(f_sec.render("agent type / recipe:", True, TEXT_PRIMARY), (sb_x, 134))
+            self.dropdown_train_recipe.draw(self.window)
+
+            # Select Agent 1
+            self.window.blit(f_sec.render("select agent 1:", True, TEXT_PRIMARY), (sb_x, 188))
+            self.dropdown_train_agent_1.draw(self.window)
+
+            # Slider 1
+            s1_lbl = f"*Drag to the desired amount: {self.train_agent_1_pct}%"
+            self.window.blit(f_lbl.render(s1_lbl, True, TEXT_MUTED), (sb_x, 242))
+            self.slider_agent_1.draw(self.window)
+
+            # Select Agent 2
+            self.window.blit(f_sec.render("select agent 2:", True, TEXT_PRIMARY), (sb_x, 310))
+            self.dropdown_train_agent_2.draw(self.window)
+
+            # Slider 2
+            s2_lbl = f"*Drag to the desired amount: {self.train_agent_2_pct}%"
+            self.window.blit(f_lbl.render(s2_lbl, True, TEXT_MUTED), (sb_x, 364))
+            self.slider_agent_2.draw(self.window)
+
+            # Name Agent (iterations locked to 650 per Berkeley paper standard)
+            self.window.blit(f_sec.render("name agent:", True, TEXT_PRIMARY), (sb_x, 432))
+            fixed_iter_lbl = f_lbl.render("[650 iters - Berkeley Standard]", True, TEXT_MUTED)
+            self.window.blit(fixed_iter_lbl, (sb_x + sb_w - fixed_iter_lbl.get_width(), 432))
+            self.input_agent_name.draw(self.window)
+
+            # Train Button
+            self.btn_train_start.draw(self.window)
+
+            # Recipe Info Card on the bottom of the menu
+            card_y = min(540, self.window_height - 38 - 88 - 8)
+            self._draw_recipe_info_card(sb_x, sb_w, card_y)
+
+            # View All Agents link button
+            self.btn_view_all_agents.draw(self.window)
+
+        elif self.train_view == "active":
+            # Image 3: Active Training View
+            card_rect = pygame.Rect(sb_x, 96, sb_w, 70)
+            UICard.draw(self.window, card_rect, bg_color=(255, 255, 255), border_color=BORDER_BLACK, shadow_offset=2)
+            title_text = "Training (Paused) . . ." if self.train_is_paused else "Training Live . . ."
+            t_surf = f_title.render(title_text, True, TEXT_PRIMARY)
+            self.window.blit(t_surf, t_surf.get_rect(center=(card_rect.centerx, card_rect.centery - 16)))
+            f_sub = FontManager.get_font(10, bold=False)
+            cur_l = getattr(self, "train_current_layout", self.train_layout)
+            l_idx = getattr(self, "train_layout_index", 1)
+            tot_l = getattr(self, "train_total_layouts", 5)
+            agent_idx_str = "Agent 1 of 2" if "ppo_greedy" in self.train_last_trained_name or self.train_recipe == "greedy" else "Agent 2 of 2"
+            next_agent_str = "Next: ppo_v_greedy" if agent_idx_str == "Agent 1 of 2" else "Final Run"
+            sub1_text = f"{agent_idx_str}: {self.train_last_trained_name.upper()}"
+            sub2_text = f"Map {l_idx}/{tot_l}: {cur_l.upper()} | {next_agent_str}"
+            s1_surf = f_sub.render(sub1_text, True, TEXT_PRIMARY)
+            s2_surf = f_sub.render(sub2_text, True, TEXT_MUTED)
+            self.window.blit(s1_surf, s1_surf.get_rect(center=(card_rect.centerx, card_rect.centery + 4)))
+            self.window.blit(s2_surf, s2_surf.get_rect(center=(card_rect.centerx, card_rect.centery + 18)))
+
+            fraction = max(0.0, min(1.0, self.train_progress_cur / max(1, self.train_progress_total)))
+            pct = int(round(fraction * 100))
+            l_iter = getattr(self, "train_layout_iter", self.train_progress_cur)
+            l_tot = getattr(self, "train_layout_total_iters", 650)
+            pb_lbl = f"Overall: {self.train_progress_cur}/{self.train_progress_total} ({pct}%) | Map: {l_iter}/{l_tot}"
+            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 174))
+
+            pb_rect = pygame.Rect(sb_x, 194, sb_w, 32)
+            pygame.draw.rect(self.window, SHADOW_BLACK, pb_rect.move(2, 2))
+            pygame.draw.rect(self.window, (255, 255, 255), pb_rect)
+
+            fill_w = int(pb_rect.width * fraction)
+            if fill_w > 0:
+                fill_r = pygame.Rect(pb_rect.x, pb_rect.y, fill_w, pb_rect.height)
+                pygame.draw.rect(self.window, (248, 113, 113), fill_r)
+                for x in range(pb_rect.x + 4, pb_rect.x + fill_w, 10):
+                    pygame.draw.line(self.window, (220, 38, 38), (x, pb_rect.bottom - 2), (min(pb_rect.x + fill_w, x + 8), pb_rect.y + 2), width=2)
+
+            pygame.draw.rect(self.window, BORDER_BLACK, pb_rect, width=2)
+
+            eta_lbl = f"Estimated Time: {self.train_eta_str}"
+            self.window.blit(f_lbl.render(eta_lbl, True, TEXT_PRIMARY), (sb_x, 236))
+
+            rew_lbl = f"Mean Reward: {self.train_reward_mean:+.2f} (Berkeley PPO)"
+            self.window.blit(f_lbl.render(rew_lbl, True, TEXT_PRIMARY), (sb_x, 258))
+
+            self.btn_view_training_live.draw(self.window)
+            self.btn_pause_training.draw(self.window)
+            self.btn_stop_training.draw(self.window)
+
+            # Recipe Info Card on the bottom of the active menu
+            active_info_y = min(374, self.window_height - 38 - 88 - 8)
+            self._draw_recipe_info_card(sb_x, sb_w, active_info_y)
+
+            self.btn_view_all_agents.draw(self.window)
+
+        elif self.train_view == "complete":
+            # Image 2: Training Complete View
+            card_rect = pygame.Rect(sb_x, 100, sb_w, 60)
+            UICard.draw(self.window, card_rect, bg_color=(255, 255, 255), border_color=BORDER_BLACK, shadow_offset=2)
+            t_surf = f_title.render("Training Complete!", True, (22, 163, 74))
+            self.window.blit(t_surf, t_surf.get_rect(center=card_rect.center))
+
+            pb_lbl = f"Progress Bar: {self.train_progress_total}/{self.train_progress_total} (100%)"
+            self.window.blit(f_sec.render(pb_lbl, True, TEXT_PRIMARY), (sb_x, 180))
+
+            pb_rect = pygame.Rect(sb_x, 204, sb_w, 36)
+            pygame.draw.rect(self.window, SHADOW_BLACK, pb_rect.move(2, 2))
+            pygame.draw.rect(self.window, (248, 113, 113), pb_rect)
+            for x in range(pb_rect.x + 4, pb_rect.right, 10):
+                pygame.draw.line(self.window, (220, 38, 38), (x, pb_rect.bottom - 2), (min(pb_rect.right, x + 8), pb_rect.y + 2), width=2)
+            pygame.draw.rect(self.window, BORDER_BLACK, pb_rect, width=2)
+
+            self.window.blit(f_lbl.render("Estimated Time: 0s", True, TEXT_PRIMARY), (sb_x, 252))
+
+            self.btn_view_jeff.draw(self.window)
+            if hasattr(self, "btn_view_matrix"):
+                self.btn_view_matrix.draw(self.window)
+            self.btn_view_agent_db.draw(self.window)
+
+            # Recipe Info Card on the bottom of the complete menu
+            complete_info_y = min(448, self.window_height - 38 - 88 - 8)
+            self._draw_recipe_info_card(sb_x, sb_w, complete_info_y)
+
+        elif self.train_view == "db":
+            # Image 1: Agent Database View
+            banner_rect = pygame.Rect(sb_x, 88, sb_w, 28)
+            UIBanner.draw(self.window, banner_rect, "Agent DataBase", bg_color=(243, 244, 246), text_color=TEXT_PRIMARY, font_size=13)
+
+            self.window.blit(f_sec.render("Search agent:", True, TEXT_PRIMARY), (sb_x, 126))
+            self.input_search_agent.rect.topleft = (sb_x + 95, 122)
+            self.input_search_agent.draw(self.window)
+
+            table_y = 156
+            table_h = self.window_height - table_y - 50
+            table_rect = pygame.Rect(sb_x, table_y, sb_w, table_h)
+            pygame.draw.rect(self.window, SHADOW_BLACK, table_rect.move(2, 2))
+            pygame.draw.rect(self.window, (255, 255, 255), table_rect)
+            pygame.draw.rect(self.window, BORDER_BLACK, table_rect, width=2)
+
+            header_rect = pygame.Rect(sb_x, table_y, sb_w, 24)
+            pygame.draw.rect(self.window, (243, 244, 246), header_rect)
+            pygame.draw.line(self.window, BORDER_BLACK, (sb_x, table_y + 24), (sb_x + sb_w, table_y + 24), width=1)
+
+            col_x1 = sb_x + 6
+            col_x2 = sb_x + 72
+            col_x3 = sb_x + 140
+            col_x4 = sb_x + sb_w - 34
+
+            f_th = FontManager.get_font(10, bold=True)
+            self.window.blit(f_th.render("Name", True, TEXT_PRIMARY), (col_x1, table_y + 6))
+            self.window.blit(f_th.render("date trained", True, TEXT_PRIMARY), (col_x2, table_y + 6))
+            self.window.blit(f_th.render("Time", True, TEXT_PRIMARY), (col_x3, table_y + 6))
+            self.window.blit(f_th.render("Delete", True, TEXT_PRIMARY), (col_x4, table_y + 6))
+
+            pygame.draw.line(self.window, (200, 205, 215), (col_x2 - 4, table_y), (col_x2 - 4, table_y + table_h), width=1)
+            pygame.draw.line(self.window, (200, 205, 215), (col_x3 - 4, table_y), (col_x3 - 4, table_y + table_h), width=1)
+            pygame.draw.line(self.window, (200, 205, 215), (col_x4 - 4, table_y), (col_x4 - 4, table_y + table_h), width=1)
+
+            records = AgentDatabase.search(self.input_search_agent.text)
+            f_td = FontManager.get_font(10)
+            max_rows = (table_h - 26) // 24
+
+            if not records:
+                empty_lbl = f_lbl.render("No agents trained yet.", True, TEXT_MUTED)
+                self.window.blit(empty_lbl, (sb_x + 20, table_y + 36))
+            else:
+                for i, r in enumerate(records[:max_rows]):
+                    ry = table_y + 25 + i * 24
+                    pygame.draw.line(self.window, (230, 233, 238), (sb_x, ry + 23), (sb_x + sb_w, ry + 23), width=1)
+
+                    name_txt = r.get("name", "agent")
+                    if len(name_txt) > 10:
+                        name_txt = name_txt[:9] + ".."
+                    self.window.blit(f_td.render(name_txt, True, TEXT_PRIMARY), (col_x1, ry + 5))
+                    self.window.blit(f_td.render(r.get("date_trained", ""), True, TEXT_SECONDARY), (col_x2, ry + 5))
+                    self.window.blit(f_td.render(r.get("time_trained", ""), True, TEXT_SECONDARY), (col_x3, ry + 5))
+
+                    del_btn_rect = pygame.Rect(sb_x + sb_w - 32, ry + 2, 26, 20)
+                    mouse_pos = pygame.mouse.get_pos()
+                    is_hov = del_btn_rect.collidepoint(mouse_pos)
+                    btn_col = (254, 226, 226) if is_hov else (243, 244, 246)
+                    pygame.draw.rect(self.window, btn_col, del_btn_rect)
+                    pygame.draw.rect(self.window, BORDER_BLACK, del_btn_rect, width=1)
+                    f_x = FontManager.get_font(11, bold=True)
+                    x_surf = f_x.render("X", True, (220, 38, 38))
+                    self.window.blit(x_surf, x_surf.get_rect(center=del_btn_rect.center))
+
+            self.btn_back_to_train.draw(self.window)
 
     def run(self) -> None:
         """Main application execution loop."""
@@ -1356,6 +2513,7 @@ class OvercookedApp:
         try:
             while self.running:
                 dt = min(self.clock.tick(60) / 1000.0, 0.2)
+                self._poll_training_progress()
                 self.handle_events()
                 if self.state == AppState.RUNNING:
                     sim_accumulator += dt
@@ -1376,6 +2534,18 @@ class OvercookedApp:
             if self.streamlit_proc is not None:
                 try:
                     self.streamlit_proc.terminate()
+                except Exception:
+                    pass
+            if self.train_process is not None and self.train_process.poll() is None:
+                try:
+                    if getattr(self, "train_is_paused", False):
+                        os.kill(self.train_process.pid, signal.SIGCONT)
+                    self.train_process.terminate()
+                except Exception:
+                    pass
+            if hasattr(self, "train_log_file") and self.train_log_file is not None:
+                try:
+                    self.train_log_file.close()
                 except Exception:
                     pass
             print("[GUI] Closed cleanly.")

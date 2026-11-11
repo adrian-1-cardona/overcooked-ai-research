@@ -23,6 +23,7 @@ st.set_page_config(
 st.title("Overcooked-AI Coordination Matrix Dashboard")
 st.markdown(
     "Cross-play evaluation matrix measuring $n \\times n$ teamwork across levels. "
+    "Rows represent **Chef 0 (Red Hat)**; columns represent **Chef 1 (Blue Hat)**. "
     "Diagonal cells represent **Self-Play (SP)**; off-diagonal cells represent **Cross-Play (XP)**."
 )
 
@@ -31,6 +32,13 @@ DEFAULT_CSV = Path("results/matrix.csv")
 # Sidebar
 st.sidebar.header("Data Configuration")
 csv_path = st.sidebar.text_input("CSV File Path", value=str(DEFAULT_CSV))
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    "### Role & Hat Guide\n"
+    "- **Rows: Chef 0 (Red Hat):** Primary lead chef\n"
+    "- **Columns: Chef 1 (Blue Hat):** Partner chef"
+)
 
 if not Path(csv_path).exists():
     st.error(f"No results file found at `{csv_path}`. Run `python evaluation/eval_matrix.py` first!")
@@ -76,8 +84,8 @@ def render_heatmap(pivot_table: pd.DataFrame, title: str, subtitle: str = "") ->
     )
 
     ax.set_title(title, fontsize=13, weight="bold", pad=12)
-    ax.set_xlabel("Chef 1 (Partner) ->", fontsize=11, weight="bold")
-    ax.set_ylabel("Chef 0 (Lead) ->", fontsize=11, weight="bold")
+    ax.set_xlabel("Chef 1 (Blue Hat - Partner) ->", fontsize=11, weight="bold", color="#1d4ed8")
+    ax.set_ylabel("Chef 0 (Red Hat - Lead) ->", fontsize=11, weight="bold", color="#b91c1c")
 
     st.pyplot(fig)
     if subtitle:

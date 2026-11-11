@@ -10,3 +10,4 @@ overcooked-agent-eval/results/*
 !overcooked-agent-eval/results/.gitkeep
 results/last_render_run.csv
 tmp/
+scratch/

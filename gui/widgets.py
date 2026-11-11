@@ -499,3 +499,226 @@ class UICheckbox:
         surface.blit(txt_surf, (box_rect.right + 10, self.rect.y + (self.rect.height - txt_surf.get_height()) // 2))
 
 
+class UITextInput:
+    """A RetroUI single-line text input field."""
+
+    def __init__(
+        self,
+        rect: pygame.Rect | tuple[int, int, int, int],
+        text: str = "",
+        placeholder: str = "",
+        max_length: int = 30,
+        on_change: Callable[[str], None] | None = None,
+        font_size: int = 13,
+    ) -> None:
+        self.rect = pygame.Rect(rect)
+        self.text = text
+        self.placeholder = placeholder
+        self.max_length = max_length
+        self.on_change = on_change
+        self.font_size = font_size
+        self.is_focused = False
+        self._cursor_timer = 0
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.is_focused = self.rect.collidepoint(event.pos)
+            return self.is_focused
+
+        if self.is_focused and event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+                if self.on_change:
+                    self.on_change(self.text)
+                return True
+            elif event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+                self.is_focused = False
+                return True
+            elif len(self.text) < self.max_length and event.unicode and event.unicode.isprintable():
+                self.text += event.unicode
+                if self.on_change:
+                    self.on_change(self.text)
+                return True
+
+        return False
+
+    def draw(self, surface: pygame.Surface) -> None:
+        pygame.draw.rect(surface, SHADOW_BLACK, self.rect.move(2, 2))
+        pygame.draw.rect(surface, (255, 255, 255), self.rect)
+        border_col = (37, 99, 235) if self.is_focused else BORDER_BLACK
+        pygame.draw.rect(surface, border_col, self.rect, width=2)
+
+        font = FontManager.get_font(self.font_size)
+        display_txt = self.text if self.text else (self.placeholder if not self.is_focused else "")
+        txt_col = TEXT_PRIMARY if self.text else TEXT_MUTED
+        txt_surf = font.render(display_txt, True, txt_col)
+        surface.blit(txt_surf, (self.rect.x + 8, self.rect.y + (self.rect.height - txt_surf.get_height()) // 2))
+
+        if self.is_focused:
+            self._cursor_timer += 1
+            if (self._cursor_timer // 20) % 2 == 0:
+                cx = self.rect.x + 8 + (txt_surf.get_width() if self.text else 0)
+                cy = self.rect.y + 6
+                ch = self.rect.height - 12
+                pygame.draw.line(surface, (0, 0, 0), (cx, cy), (cx, cy + ch), width=2)
+
+
+class UISlider:
+    """A stepped percentage slider with RetroUI hatched fill and tick marks."""
+
+    def __init__(
+        self,
+        rect: pygame.Rect | tuple[int, int, int, int],
+        value: int = 50,
+        min_val: int = 10,
+        max_val: int = 100,
+        step: int = 10,
+        on_change: Callable[[int], None] | None = None,
+        fill_color: tuple[int, int, int] = (248, 113, 113),
+    ) -> None:
+        self.rect = pygame.Rect(rect)
+        self.value = value
+        self.min_val = min_val
+        self.max_val = max_val
+        self.step = step
+        self.on_change = on_change
+        self.fill_color = fill_color
+        self.is_dragging = False
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                self.is_dragging = True
+                self._update_from_pos(event.pos[0])
+                return True
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.is_dragging:
+                self.is_dragging = False
+                return True
+        elif event.type == pygame.MOUSEMOTION and self.is_dragging:
+            self._update_from_pos(event.pos[0])
+            return True
+        return False
+
+    def _update_from_pos(self, mouse_x: int) -> None:
+        fraction = max(0.0, min(1.0, (mouse_x - self.rect.x) / self.rect.width))
+        raw_val = self.min_val + fraction * (self.max_val - self.min_val)
+        stepped = round(raw_val / self.step) * self.step
+        new_val = max(self.min_val, min(self.max_val, int(stepped)))
+        if new_val != self.value:
+            self.value = new_val
+            if self.on_change:
+                self.on_change(self.value)
+
+    def draw(self, surface: pygame.Surface) -> None:
+        pygame.draw.rect(surface, SHADOW_BLACK, self.rect.move(2, 2))
+        pygame.draw.rect(surface, (255, 255, 255), self.rect)
+
+        fraction = (self.value - self.min_val) / max(1, (self.max_val - self.min_val))
+        fill_w = int(self.rect.width * fraction)
+        if fill_w > 0:
+            fill_rect = pygame.Rect(self.rect.x, self.rect.y, fill_w, self.rect.height)
+            pygame.draw.rect(surface, self.fill_color, fill_rect)
+            # Retro hatching pattern matching wireframe
+            for x in range(self.rect.x + 4, self.rect.x + fill_w, 8):
+                pygame.draw.line(surface, (220, 38, 38), (x, self.rect.bottom - 2), (min(self.rect.x + fill_w, x + 6), self.rect.y + 2), width=1)
+
+        num_steps = (self.max_val - self.min_val) // self.step
+        for i in range(1, num_steps):
+            tx = self.rect.x + int(i * (self.rect.width / num_steps))
+            pygame.draw.line(surface, BORDER_BLACK, (tx, self.rect.y), (tx, self.rect.bottom), width=1)
+
+        pygame.draw.rect(surface, BORDER_BLACK, self.rect, width=2)
+
+        font = FontManager.get_font(9)
+        for i in range(num_steps + 1):
+            val = self.min_val + i * self.step
+            tx = self.rect.x + int(i * (self.rect.width / num_steps))
+            if val == self.value:
+                pts = [(tx, self.rect.bottom + 2), (tx - 4, self.rect.bottom + 6), (tx + 4, self.rect.bottom + 6)]
+                pygame.draw.polygon(surface, (0, 0, 0), pts)
+            lbl = font.render(str(val), True, TEXT_PRIMARY if val == self.value else TEXT_MUTED)
+            surface.blit(lbl, (tx - lbl.get_width() // 2, self.rect.bottom + 7))
+
+
+class UIModalConfirm:
+    """A RetroUI Confirmation Modal popup (Are you Sure?)."""
+
+    def __init__(
+        self,
+        title: str = "Are you Sure?",
+        message: str = "",
+        on_confirm: Callable[[], None] | None = None,
+        on_cancel: Callable[[], None] | None = None,
+    ) -> None:
+        self.title = title
+        self.message = message
+        self.on_confirm = on_confirm
+        self.on_cancel = on_cancel
+        self.is_visible = False
+
+        self.btn_yes = UIButton(rect=(0, 0, 96, 32), text="Yes, Delete", on_click=self._handle_yes, bg_color=(239, 68, 68), hover_color=(220, 38, 38), text_color=(255, 255, 255), font_size=12)
+        self.btn_cancel = UIButton(rect=(0, 0, 75, 32), text="Cancel", on_click=self._handle_cancel, font_size=12)
+
+    def show(self, title: str, message: str, on_confirm: Callable[[], None]) -> None:
+        self.title = title
+        self.message = message
+        self.on_confirm = on_confirm
+        self.is_visible = True
+
+    def _handle_yes(self) -> None:
+        self.is_visible = False
+        if self.on_confirm:
+            self.on_confirm()
+
+    def _handle_cancel(self) -> None:
+        self.is_visible = False
+        if self.on_cancel:
+            self.on_cancel()
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        if not self.is_visible:
+            return False
+        if self.btn_yes.handle_event(event):
+            return True
+        if self.btn_cancel.handle_event(event):
+            return True
+        return True
+
+    def draw(self, surface: pygame.Surface) -> None:
+        if not self.is_visible:
+            return
+
+        w, h = surface.get_size()
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        surface.blit(overlay, (0, 0))
+
+        mw, mh = 320, 150
+        mx = (w - mw) // 2
+        my = (h - mh) // 2
+        modal_rect = pygame.Rect(mx, my, mw, mh)
+
+        pygame.draw.rect(surface, SHADOW_BLACK, modal_rect.move(4, 4))
+        pygame.draw.rect(surface, (255, 255, 255), modal_rect)
+        pygame.draw.rect(surface, BORDER_BLACK, modal_rect, width=2)
+
+        banner_rect = pygame.Rect(mx, my, mw, 34)
+        pygame.draw.rect(surface, (254, 226, 226), banner_rect)
+        pygame.draw.line(surface, BORDER_BLACK, (mx, my + 34), (mx + mw, my + 34), width=2)
+        font_title = FontManager.get_font(14, bold=True)
+        t_surf = font_title.render(self.title, True, (220, 38, 38))
+        surface.blit(t_surf, t_surf.get_rect(center=banner_rect.center))
+
+        font_msg = FontManager.get_font(12)
+        m_surf = font_msg.render(self.message, True, TEXT_PRIMARY)
+        surface.blit(m_surf, m_surf.get_rect(center=(mx + mw // 2, my + 64)))
+
+        btn_y = my + mh - 42
+        self.btn_cancel.rect.topleft = (mx + 60, btn_y)
+        self.btn_yes.rect.topleft = (mx + 155, btn_y)
+
+        self.btn_cancel.draw(surface)
+        self.btn_yes.draw(surface)
+
+

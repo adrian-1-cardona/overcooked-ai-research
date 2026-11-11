@@ -74,8 +74,15 @@ class FontManager:
     _fonts: dict[tuple[str, int, bool], pygame.font.Font] = {}
 
     @classmethod
+    def clear_cache(cls) -> None:
+        """Clear cached font objects (useful when pygame restarts)."""
+        cls._fonts.clear()
+
+    @classmethod
     def get_font(cls, size: int = 14, bold: bool = False) -> pygame.font.Font:
-        pygame.font.init()
+        if not pygame.font.get_init():
+            cls._fonts.clear()
+            pygame.font.init()
         key = ("default", size, bold)
         if key not in cls._fonts:
             font: pygame.font.Font | None = None
@@ -100,7 +107,9 @@ class FontManager:
     @classmethod
     def get_mono_font(cls, size: int = 13, bold: bool = False) -> pygame.font.Font:
         """Returns a crisp monospace font for numbers, telemetry, and metrics."""
-        pygame.font.init()
+        if not pygame.font.get_init():
+            cls._fonts.clear()
+            pygame.font.init()
         key = ("mono", size, bold)
         if key not in cls._fonts:
             font: pygame.font.Font | None = None

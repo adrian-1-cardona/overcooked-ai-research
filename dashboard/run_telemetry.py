@@ -1,5 +1,5 @@
 """
-Streamlit dashboard for visualising telemetry run CSVs from render.py
+Streamlit dashboard for visualising telemetry run CSVs from runover.py
 (e.g., results/last_render_run.csv or any recorded gameplay CSV).
 
 Features:
@@ -33,6 +33,13 @@ elif os.path.exists(ALT_CSV):
     selected_path = ALT_CSV
 
 uploaded_file = st.sidebar.file_uploader("Upload Telemetry CSV", type=["csv"])
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    "### Chef Role Guide\n"
+    "- **Chef 0 (Red Hat):** Player 0 (Red color theme)\n"
+    "- **Chef 1 (Blue Hat):** Player 1 (Blue color theme)"
+)
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
@@ -81,20 +88,20 @@ with tab2:
     
     with c1:
         if "agent_0_action" in df.columns:
-            st.markdown("### Chef 0 Actions")
+            st.markdown("### Chef 0 (Red Hat) Actions")
             a0_counts = df["agent_0_action"].value_counts()
             fig0, ax0 = plt.subplots(figsize=(5, 3.5))
-            sns.barplot(x=a0_counts.index, y=a0_counts.values, palette="Blues_d", ax=ax0)
+            sns.barplot(x=a0_counts.index, y=a0_counts.values, palette="Reds_r", ax=ax0)
             ax0.set_ylabel("Count")
             plt.xticks(rotation=30)
             st.pyplot(fig0)
 
     with c2:
         if "agent_1_action" in df.columns:
-            st.markdown("### Chef 1 Actions")
+            st.markdown("### Chef 1 (Blue Hat) Actions")
             a1_counts = df["agent_1_action"].value_counts()
             fig1, ax1 = plt.subplots(figsize=(5, 3.5))
-            sns.barplot(x=a1_counts.index, y=a1_counts.values, palette="Oranges_d", ax=ax1)
+            sns.barplot(x=a1_counts.index, y=a1_counts.values, palette="Blues_r", ax=ax1)
             ax1.set_ylabel("Count")
             plt.xticks(rotation=30)
             st.pyplot(fig1)

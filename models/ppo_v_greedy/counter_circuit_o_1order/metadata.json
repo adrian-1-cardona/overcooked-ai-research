@@ -1,0 +1,10 @@
+{
+  "recipe": "ppo_50_50",
+  "layout_name": "counter_circuit_o_1order",
+  "partner_type": "greedy",
+  "partner_prob": 0.5,
+  "current_iter": 650,
+  "total_iters": 650,
+  "reward_mean": 168.83,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_v_greedy/counter_circuit_o_1order/checkpoint_000650"
+}
