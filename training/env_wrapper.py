@@ -17,11 +17,19 @@ Academic Papers & Citations:
   "On the Utility of Learning about Humans for Human-AI Coordination"
   https://arxiv.org/abs/1910.05789
   Pioneered the multi-agent Gym wrapping methodology for Overcooked-AI rollouts.
+- Mnih et al. (2013, 2015):
+  https://arxiv.org/abs/1312.5602
+  https://www.nature.com/articles/nature14236
+  Four consecutive observations provide temporal context to a feed-forward policy.
+  FIFO history, repeated initial-frame padding, and channel concatenation follow
+  OpenAI Baselines' FrameStack wrapper:
+  https://github.com/openai/baselines/blob/master/baselines/common/atari_wrappers.py
 """
 
 from __future__ import annotations
 
 import sys
+from collections import deque
 from pathlib import Path
 from typing import Any
 import numpy as np
@@ -40,9 +48,11 @@ from human_aware_rl.rllib.rllib import OvercookedMultiAgent
 
 from training.greedy_policy import WorkerStateContext
 
+FRAME_STACK_SIZE = 4
+
 
 class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
-    """Extension of OvercookedMultiAgent supporting 'greedy' as a non-learning partner."""
+    """Multi-agent environment with four-frame PPO histories and raw partner inputs."""
 
     supported_agents = ["ppo", "bc", "greedy"]
 
@@ -71,6 +81,12 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
 
     def _setup_observation_space(self, agents: list[str]) -> None:
         super()._setup_observation_space(agents)
+        single_frame_space = self.ppo_observation_space
+        self.ppo_observation_space = gymnasium.spaces.Box(
+            low=np.concatenate([single_frame_space.low] * FRAME_STACK_SIZE, axis=-1),
+            high=np.concatenate([single_frame_space.high] * FRAME_STACK_SIZE, axis=-1),
+            dtype=single_frame_space.dtype,
+        )
         self.greedy_observation_space = gymnasium.spaces.Box(
             low=-1.0, high=1.0, shape=(1,), dtype=np.float32
         )
@@ -151,10 +167,23 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
 
     def reset(self, regen_mdp: bool = True) -> dict[str, Any]:
         obs = super().reset(regen_mdp=regen_mdp)
+        # Reset also runs during the superclass constructor. Rebuild histories so
+        # no frames survive an episode boundary or a change in partner/seat.
+        self._ppo_frame_buffers: dict[str, deque[np.ndarray]] = {
+            agent_id: deque([frame] * FRAME_STACK_SIZE, maxlen=FRAME_STACK_SIZE)
+            for agent_id, frame in obs.items()
+            if agent_id.startswith("ppo")
+        }
+        for agent_id, frames in self._ppo_frame_buffers.items():
+            obs[agent_id] = np.concatenate(frames, axis=-1)
         self._update_worker_context()
         return obs
 
     def step(self, action_dict: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
         obs, rewards, dones, infos = super().step(action_dict)
+        for agent_id, frames in self._ppo_frame_buffers.items():
+            frames.append(obs[agent_id])
+            # Oldest to newest; only PPO observations contain temporal history.
+            obs[agent_id] = np.concatenate(frames, axis=-1)
         self._update_worker_context()
         return obs, rewards, dones, infos

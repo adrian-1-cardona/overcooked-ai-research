@@ -39,7 +39,6 @@ Advisor / Guidance:
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import os
 import sys
@@ -59,16 +58,13 @@ os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 os.environ.setdefault("PYTHONWARNINGS", "ignore")
 
-import gym as gymnasium
-import numpy as np
 import ray
 from ray.rllib.agents.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
 from ray.tune.registry import register_env
-from ray.tune.result import DEFAULT_RESULTS_DIR
+from ray.tune.logger import UnifiedLogger
 
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
-from human_aware_rl.rllib.rllib import save_trainer
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
@@ -79,16 +75,17 @@ from training.greedy_policy import GreedyRllibPolicy
 STATUS_FILE = REPO_ROOT / "results" / "training_status.json"
 
 
-def update_status(data: dict[str, Any]) -> None:
-    """Write current training status to a JSON file for the GUI to read."""
-    try:
-        STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = STATUS_FILE.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        tmp.replace(STATUS_FILE)
-    except Exception:
-        pass
+def update_status(data: dict[str, Any], out_dir: str | Path) -> None:
+    """Keep a run's status alongside its outputs and update the GUI's latest status."""
+    for status_file in (Path(out_dir) / "training_status.json", STATUS_FILE):
+        tmp = status_file.with_suffix(f".{os.getpid()}.tmp")
+        try:
+            status_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            tmp.replace(status_file)
+        except OSError:
+            pass
 
 
 def build_trainer(
@@ -153,6 +150,7 @@ def build_trainer(
 
     # Probe spaces with a dummy environment
     probe_env = env_creator(env_config)
+    # RllibPPOModel derives its convolutional input shape from this stacked space.
     ppo_obs_space = probe_env.ppo_observation_space
     greedy_obs_space = probe_env.greedy_observation_space
     action_space = probe_env.shared_action_space
@@ -261,7 +259,13 @@ def build_trainer(
     }
 
     save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_{layout_name}"
-    trainer = PPOTrainer(config=trainer_config)
+    log_dir = save_path.resolve() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    def logger_creator(config: dict[str, Any]) -> UnifiedLogger:
+        return UnifiedLogger(config, str(log_dir), loggers=None)
+
+    trainer = PPOTrainer(config=trainer_config, logger_creator=logger_creator)
     return trainer, {
         "save_path": save_path,
         "recipe": recipe,
@@ -310,6 +314,7 @@ def train_single_layout(
 
     save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_{layout_name}"
     save_path.mkdir(parents=True, exist_ok=True)
+    status_dir = Path(multi_layout_parent) if multi_layout_parent else save_path
 
     is_multi = layout_index is not None and total_layouts is not None
     overall_total_iters = (total_layouts * num_iters) if is_multi else num_iters
@@ -328,7 +333,7 @@ def train_single_layout(
         "reward_mean": 0.0,
         "percent": round((curr_overall / max(1, overall_total_iters)) * 100.0, 1),
         "eta_seconds": initial_eta,
-    })
+    }, status_dir)
 
     if dry_run:
         print(f"[Dry Run] Verifying trainer initialization for {layout_name}...")
@@ -351,7 +356,7 @@ def train_single_layout(
             "reward_mean": 0.0,
             "percent": 0.0,
             "eta_seconds": 0,
-        })
+        }, status_dir)
         return save_path
 
     trainer, meta = build_trainer(
@@ -402,7 +407,7 @@ def train_single_layout(
                 "reward_mean": round(float(reward_mean), 2),
                 "percent": pct,
                 "eta_seconds": eta_seconds,
-            })
+            }, status_dir)
         else:
             remaining_iters = num_iters - iteration
             eta_seconds = max(0, int(remaining_iters * avg_iter_time))
@@ -419,7 +424,11 @@ def train_single_layout(
                 "reward_mean": round(float(reward_mean), 2),
                 "percent": pct,
                 "eta_seconds": eta_seconds,
-            })
+            }, status_dir)
+
+        if iteration % 50 == 0 and iteration < num_iters:
+            checkpoint_dir = trainer.save(str(save_path))
+            print(f"Checkpoint saved to: {checkpoint_dir}")
 
     # Save final checkpoint for this layout
     checkpoint_dir = trainer.save(str(save_path))
@@ -449,7 +458,7 @@ def train_single_layout(
             "percent": 100.0,
             "eta_seconds": 0,
             "checkpoint_dir": str(checkpoint_dir),
-        })
+        }, status_dir)
 
     if shutdown_at_end and ray.is_initialized():
         ray.shutdown()
@@ -488,7 +497,7 @@ def train_multi_layout(
         "reward_mean": 0.0,
         "percent": 0.0,
         "eta_seconds": initial_eta,
-    })
+    }, save_path)
 
     if dry_run:
         print("[Dry Run] Verifying multi-layout pipeline for all 5 layouts...")
@@ -568,7 +577,7 @@ def train_multi_layout(
         "percent": 100.0,
         "eta_seconds": 0,
         "checkpoint_dir": str(save_path),
-    })
+    }, save_path)
 
     print("\n" + "=" * 60)
     print(f"ALL-MAPS TRAINING COMPLETE FOR {recipe.upper()}!")

@@ -372,7 +372,7 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             try:
                 with suppress_c_stderr():
                     from training.train_agent import build_trainer
-                    from human_aware_rl.rllib.rllib import RlLibAgent
+                    from training.frame_stacked_agent import FrameStackedRlLibAgent
 
                     trainer_key = f"{str(model_path.resolve())}_{layout}"
                     if trainer_key not in _TRAINER_CACHE:
@@ -391,7 +391,7 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                     trainer = _TRAINER_CACHE[trainer_key]
                     policy = trainer.get_policy("ppo")
                     featurize_fn = lambda state, debug=False: mdp.lossless_state_encoding(state, 400)
-                    agent = RlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
+                    agent = FrameStackedRlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
                     agent.set_agent_index(agent_index)
                     agent.set_mdp(mdp)
                     agent.reset()

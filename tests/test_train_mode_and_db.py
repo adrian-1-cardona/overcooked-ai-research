@@ -190,6 +190,9 @@ class TestTrainModeAndDB(unittest.TestCase):
         # 3. Load agent into Overcooked and step
         agent, warn = create_agent(f"custom:{test_model_dir}", 0, self.app.mdp, "cramped_room")
         self.assertIsNotNone(agent)
+        self.assertIsNone(warn, f"Trained PPO must load without falling back: {warn}")
+        from training.frame_stacked_agent import FrameStackedRlLibAgent
+        self.assertIsInstance(agent, FrameStackedRlLibAgent)
         state = self.app.mdp.get_standard_start_state()
         action, info = agent.action(state)
         self.assertIn(action, [(-1, 0), (1, 0), (0, -1), (0, 1), (0, 0), "interact"])

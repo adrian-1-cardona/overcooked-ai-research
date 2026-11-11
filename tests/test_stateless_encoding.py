@@ -1,15 +1,14 @@
 """Stateless State Encoding & Contract Regression Tests.
 
 This test suite guarantees that the default stateless observation encoding in Overcooked-AI
-and the multi-agent training environment wrappers remain strictly preserved across all
-supported layouts and agent configurations.
+remains preserved across all supported layouts and agent configurations, while PPO
+training wrappers expose a four-frame history.
 
-When branching to implement frame stacking (e.g. k-frame history or temporal concatenation),
-these tests ensure that:
+These tests ensure that:
 1. The stateless 26-channel spatial encoding contract (lossless_state_encoding_mdp) is preserved.
 2. The 96-feature vector featurization (featurize_state_mdp) is preserved for BC models.
 3. Statelessness invariant: encoding is purely functional and memoryless (no historical artifacts).
-4. MultiAgent wrappers (OvercookedPartnerMultiAgent) yield exact stateless observation spaces and values.
+4. MultiAgent wrappers stack PPO observations without changing Greedy or BC inputs.
 5. All baseline agents (Greedy, Stay, Random, BC, PPO) continue operating with stateless inputs.
 """
 
@@ -137,20 +136,20 @@ class TestStatelessEncodingContracts(unittest.TestCase):
             err_msg="Lossless stateless encoding for P1 is not deterministic / memoryless!",
         )
 
-    def test_overcooked_partner_multiagent_stateless_contract(self) -> None:
-        """Verify that OvercookedPartnerMultiAgent initializes with stateless spaces and steps cleanly."""
+    def test_overcooked_partner_multiagent_stacked_contract(self) -> None:
+        """Verify that the training wrapper stacks PPO frames and preserves Greedy inputs."""
         for layout_name, (w, h) in BENCHMARK_LAYOUTS[:2]:
             with self.subTest(layout=layout_name):
                 mdp = OvercookedGridworld.from_layout_name(layout_name)
                 base_env = OvercookedEnv.from_mdp(mdp, horizon=20)
                 multi_env = OvercookedPartnerMultiAgent(
-                    base_env, partner_type="greedy", partner_prob=1.0
+                    base_env, partner_type="greedy", partner_prob=1.0, use_phi=False
                 )
 
                 # Check observation space definitions
                 self.assertEqual(
                     multi_env.ppo_observation_space.shape,
-                    (w, h, STATELESS_PPO_CHANNELS),
+                    (w, h, STATELESS_PPO_CHANNELS * 4),
                 )
                 self.assertEqual(multi_env.greedy_observation_space.shape, (1,))
 
@@ -160,17 +159,17 @@ class TestStatelessEncodingContracts(unittest.TestCase):
 
                 for agent_id, agent_obs in obs.items():
                     if agent_id.startswith("ppo"):
-                        self.assertEqual(agent_obs.shape, (w, h, STATELESS_PPO_CHANNELS))
+                        self.assertEqual(agent_obs.shape, (w, h, STATELESS_PPO_CHANNELS * 4))
                     elif agent_id.startswith("greedy"):
                         self.assertEqual(agent_obs.shape, (1,))
 
-                # Step through 5 steps and verify observation shapes remain stateless throughout
+                # Step through 5 steps and verify observation shapes remain fixed throughout
                 for _ in range(5):
                     joint_act = {a: Action.ACTION_TO_INDEX[Action.STAY] for a in obs.keys()}
                     next_obs, rewards, dones, infos = multi_env.step(joint_act)
                     for agent_id, agent_obs in next_obs.items():
                         if agent_id.startswith("ppo"):
-                            self.assertEqual(agent_obs.shape, (w, h, STATELESS_PPO_CHANNELS))
+                            self.assertEqual(agent_obs.shape, (w, h, STATELESS_PPO_CHANNELS * 4))
                         elif agent_id.startswith("greedy"):
                             self.assertEqual(agent_obs.shape, (1,))
 
@@ -207,10 +206,10 @@ class TestStatelessEncodingContracts(unittest.TestCase):
                 self.assertIn(action, Action.ALL_ACTIONS)
 
     def test_frame_stacking_boundary_guard(self) -> None:
-        """Guard the boundary: stateless observation space must not be accidentally widened.
+        """Guard the boundary: the base encoder must not be accidentally widened.
 
-        If someone modifies base lossless encoding to return stacked frames without preserving
-        the 26-channel contract for stateless mode, this test will fail explicitly.
+        Stacking belongs in the training wrapper; the base lossless encoding
+        retains its 26-channel contract for consumers of individual states.
         """
         mdp = OvercookedGridworld.from_layout_name("cramped_room")
         env = OvercookedEnv.from_mdp(mdp, horizon=10)
@@ -221,7 +220,7 @@ class TestStatelessEncodingContracts(unittest.TestCase):
             p0_obs.shape[-1],
             STATELESS_PPO_CHANNELS,
             f"Stateless observation channel count altered! Expected {STATELESS_PPO_CHANNELS}, got {p0_obs.shape[-1]}. "
-            "If introducing frame stacking, keep the stateless default intact or make frame stacking opt-in.",
+            "Frame stacking belongs in the training wrapper, not in the base encoder.",
         )
 
 

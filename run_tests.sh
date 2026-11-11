@@ -47,6 +47,7 @@ $PYTEST \
     tests/test_greedy_policy.py \
     tests/test_joint_step.py \
     tests/test_partner_env.py \
+    tests/test_frame_stacked_agent.py \
     tests/test_timer_and_progress.py \
     -v
 
