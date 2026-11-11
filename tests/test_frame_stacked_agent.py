@@ -86,3 +86,21 @@ def test_reset_repeats_initial_frame_after_a_new_episode():
     np.testing.assert_array_equal(
         policy.observations[-1][0], np.concatenate([initial] * 4, axis=-1)
     )
+
+
+def test_legacy_checkpoint_keeps_saved_single_frame_input():
+    from training.checkpoint_policy import load_checkpoint_policy, agent_from_policy
+    from human_aware_rl.rllib.rllib import RlLibAgent
+
+    checkpoint = REPO_ROOT / 'models/ppo_greedy/cramped_room/checkpoint_000650/checkpoint-650'
+    policy = load_checkpoint_policy(checkpoint)
+    try:
+        assert policy.model.base_model.input_shape == (None, 5, 4, 26)
+        env = OvercookedEnv.from_mdp(OvercookedGridworld.from_layout_name('cramped_room'), horizon=20)
+        agent = agent_from_policy(policy, 1, env)
+        assert type(agent) is RlLibAgent
+        assert agent.agent_index == 1
+        action, _ = agent.action(env.state)
+        assert action in Action.ALL_ACTIONS
+    finally:
+        policy.get_session().close()

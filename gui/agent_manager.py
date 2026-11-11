@@ -62,10 +62,14 @@ LAYOUT_TO_ASSET_NAME: dict[str, str] = {
 
 # Trainer cache so loading PPO is only done once per layout
 _TRAINER_CACHE: dict[str, Any] = {}
+_CHECKPOINT_POLICY_CACHE: dict[str, Any] = {}
 
 
 def evict_trainer_cache(key_substr: str | None = None) -> None:
     """Evict cached trainers from memory when agents are deleted or reset."""
+    for key in list(_CHECKPOINT_POLICY_CACHE):
+        if key_substr is None or key_substr in key:
+            _CHECKPOINT_POLICY_CACHE.pop(key).get_session().close()
     if key_substr is None:
         _TRAINER_CACHE.clear()
     else:
@@ -371,27 +375,14 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
 
             try:
                 with suppress_c_stderr():
-                    from training.train_agent import build_trainer
-                    from training.frame_stacked_agent import FrameStackedRlLibAgent
+                    from training.checkpoint_policy import load_checkpoint_policy, agent_from_policy
 
-                    trainer_key = f"{str(model_path.resolve())}_{layout}"
-                    if trainer_key not in _TRAINER_CACHE:
-                        partner_type = meta.get("partner_type", "greedy")
-                        partner_prob = meta.get("partner_prob", None)
-                        trainer, _ = build_trainer(
-                            recipe=recipe,
-                            layout_name=layout,
-                            partner_type=partner_type,
-                            partner_prob=partner_prob,
-                            num_workers=0,
-                        )
-                        trainer.restore(str(ckpt_files[0]))
-                        _TRAINER_CACHE[trainer_key] = trainer
-
-                    trainer = _TRAINER_CACHE[trainer_key]
-                    policy = trainer.get_policy("ppo")
-                    featurize_fn = lambda state, debug=False: mdp.lossless_state_encoding(state, 400)
-                    agent = FrameStackedRlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
+                    checkpoint_key = str(ckpt_files[0].resolve())
+                    if checkpoint_key not in _CHECKPOINT_POLICY_CACHE:
+                        _CHECKPOINT_POLICY_CACHE[checkpoint_key] = load_checkpoint_policy(ckpt_files[0])
+                    policy = _CHECKPOINT_POLICY_CACHE[checkpoint_key]
+                    inference_env = OvercookedEnv.from_mdp(mdp, horizon=400)
+                    agent = agent_from_policy(policy, agent_index, inference_env)
                     agent.set_agent_index(agent_index)
                     agent.set_mdp(mdp)
                     agent.reset()
