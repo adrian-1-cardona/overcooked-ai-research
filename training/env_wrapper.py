@@ -1,4 +1,23 @@
-"""MultiAgent Environment wrapper supporting Greedy partner training."""
+"""MultiAgent Environment wrapper supporting Greedy partner training.
+
+Repositories & Upstream Sources:
+- HumanCompatibleAI/human_aware_rl:
+  https://github.com/HumanCompatibleAI/human_aware_rl
+  Extends `human_aware_rl.rllib.rllib.OvercookedMultiAgent` to support custom non-learning
+  partner injection (such as GreedySymbolSearchAgent) alongside standard PPO and BC agents.
+- HumanCompatibleAI/overcooked_ai:
+  https://github.com/HumanCompatibleAI/overcooked_ai
+  Provides the base game simulation environment, state transitions, and reward structures.
+- Ray RLlib (ray-project/ray):
+  https://github.com/ray-project/ray
+  MultiAgentEnv interface for coordinating joint actions across heterogeneous policies.
+
+Academic Papers & Citations:
+- Carroll et al. (NeurIPS 2019):
+  "On the Utility of Learning about Humans for Human-AI Coordination"
+  https://arxiv.org/abs/1910.05789
+  Pioneered the multi-agent Gym wrapping methodology for Overcooked-AI rollouts.
+"""
 
 from __future__ import annotations
 

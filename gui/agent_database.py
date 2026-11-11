@@ -1,4 +1,13 @@
-"""Agent database manager for tracking, searching, and deleting trained agents."""
+"""Agent database manager for tracking, searching, and deleting trained agents.
+
+Maintains model registry and metadata for agent checkpoints trained with
+Ray RLlib and the Overcooked-AI pipeline.
+
+References:
+- models/registry.json: Persistent JSON catalog of registered agents.
+- HumanCompatibleAI/human_aware_rl: Checkpoint directory structure and metadata conventions.
+- Project Guidance: Prof. Rodrigo Canaan (Cal Poly) - Overcooked-AI Research
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,20 @@
-"""Sequential training pipeline for PPO_SelfPlay and PPO_HumanModel agents."""
+"""Sequential training pipeline for PPO_SelfPlay and PPO_HumanModel agents.
+
+Repositories & Upstream Sources:
+- HumanCompatibleAI/human_aware_rl:
+  https://github.com/HumanCompatibleAI/human_aware_rl
+  Pipeline design replicating the baseline experiments comparing PPO Self-Play against
+  PPO trained with Behavioral Cloning (BC) human models.
+- HumanCompatibleAI/overcooked_ai:
+  https://github.com/HumanCompatibleAI/overcooked_ai
+  Benchmark environment for multi-agent coordination.
+
+Academic Papers & Citations:
+- Carroll et al. (NeurIPS 2019):
+  "On the Utility of Learning about Humans for Human-AI Coordination"
+  https://arxiv.org/abs/1910.05789
+  Original paper benchmarking PPO_SP (Self-Play) vs PPO_BC (Human Model) baselines.
+"""
 
 from __future__ import annotations
 

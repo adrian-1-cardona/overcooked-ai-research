@@ -1,4 +1,40 @@
-"""Training runner for PPO agents with custom partner recipes (Greedy Specialist, 50/50 Mix, Self-Play)."""
+"""Training runner for PPO agents with custom partner recipes (Greedy Specialist, 50/50 Mix, Self-Play).
+
+Repositories & Upstream Sources:
+- HumanCompatibleAI/overcooked_ai:
+  https://github.com/HumanCompatibleAI/overcooked_ai
+  Provides the Overcooked-AI Markov Decision Process (OvercookedGridworld, OvercookedEnv),
+  grid layouts, object states, low-level action space, and heuristic motion planners.
+- HumanCompatibleAI/human_aware_rl:
+  https://github.com/HumanCompatibleAI/human_aware_rl
+  Provides Berkeley's Human-Aware Reinforcement Learning PPO model architecture (RllibPPOModel),
+  multi-agent wrappers, checkpoint saving utilities, and baseline hyperparameters.
+- Ray RLlib (ray-project/ray):
+  https://github.com/ray-project/ray
+  Provides distributed reinforcement learning execution via PPOTrainer, Policy API,
+  and rollout worker management.
+
+Academic Papers & Citations:
+- Carroll et al. (NeurIPS 2019):
+  "On the Utility of Learning about Humans for Human-AI Coordination"
+  https://arxiv.org/abs/1910.05789
+  Established the Overcooked-AI benchmark, the 5 canonical layouts, the standard
+  600-650 training iteration benchmark (~2.6M timesteps), and demonstrated that pure
+  self-play agents fail when paired with alternative partners.
+- Schulman et al. (2017):
+  "Proximal Policy Optimization Algorithms"
+  https://arxiv.org/abs/1707.06347
+  Core policy gradient optimization algorithm used for training.
+- Strouse et al. (NeurIPS 2021) / Charakorn et al. (2020):
+  "Collaborating with Humans without Human Data" (Fictitious Co-Play)
+  https://arxiv.org/abs/2110.08176
+  Foundation for training partner-robust agents via diverse rule-based and synthetic partners,
+  directly informing our ppo_greedy (specialist) and ppo_v_greedy (50/50 mix) recipes.
+
+Advisor / Guidance:
+- Prof. Rodrigo Canaan, California Polytechnic State University (Cal Poly)
+  Research advisor guiding the multi-agent coordination benchmark and partner recipes.
+"""
 
 from __future__ import annotations
 

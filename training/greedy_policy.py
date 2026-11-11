@@ -2,6 +2,24 @@
 
 Allows RLLib multi-agent trainers (like PPOTrainer) to rollout Overcooked
 episodes with GreedySymbolSearchAgent acting as a fixed, non-learning partner.
+
+Repositories & Upstream Sources:
+- HumanCompatibleAI/overcooked_ai:
+  https://github.com/HumanCompatibleAI/overcooked_ai
+  Provides the Overcooked MDP, gridworld representation, and action mappings.
+- Ray RLlib (ray-project/ray):
+  https://github.com/ray-project/ray
+  Subclasses `ray.rllib.policy.Policy` to expose a compliant non-learning policy interface
+  that executes during multi-agent rollouts in parallel worker processes.
+- overcooked-agent-eval/agents/greedy_symbol_search.py:
+  Internal heuristic greedy agent planning high-level recipe subgoals (onions, pots, dishes, soups).
+
+Academic Papers & Citations:
+- Carroll et al. (NeurIPS 2019):
+  "On the Utility of Learning about Humans for Human-AI Coordination"
+  https://arxiv.org/abs/1910.05789
+  Motivated the use of heuristic and rule-based partner models to evaluate and train
+  reinforcement learning agents beyond self-play bubbles.
 """
 
 from __future__ import annotations

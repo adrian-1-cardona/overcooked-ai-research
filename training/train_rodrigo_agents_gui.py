@@ -1,4 +1,25 @@
-"""Sequential training of Professor Rodrigo's agents via GUI train button flow and diagnostics."""
+"""Sequential training of Professor Rodrigo's agents via GUI train button flow and diagnostics.
+
+Trains the two benchmark agent families:
+1. `ppo_greedy`: PPO trained exclusively against the Greedy heuristic specialist partner.
+2. `ppo_v_greedy`: PPO trained with a 50/50 mix (50% PPO self-play, 50% Greedy specialist partner).
+
+Repositories & Upstream Sources:
+- HumanCompatibleAI/overcooked_ai:
+  https://github.com/HumanCompatibleAI/overcooked_ai
+  Layout definitions for the 5 benchmark kitchens: cramped_room, asymmetric_advantages,
+  coordination_ring, forced_coordination, and counter_circuit_o_1order.
+- HumanCompatibleAI/human_aware_rl:
+  https://github.com/HumanCompatibleAI/human_aware_rl
+  RLlib PPO integration and policy architecture.
+
+Academic Guidance:
+- Research Advisor: Prof. Rodrigo Canaan (Cal Poly)
+  Research direction investigating heuristic partner training vs. self-play in Overcooked.
+- Carroll et al. (NeurIPS 2019):
+  "On the Utility of Learning about Humans for Human-AI Coordination"
+  https://arxiv.org/abs/1910.05789
+"""
 
 from __future__ import annotations
 
