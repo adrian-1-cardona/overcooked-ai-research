@@ -368,10 +368,24 @@ def train_single_layout(
         out_dir=save_path,
     )
 
+    start_iter = 1
+    existing_ckpts = sorted(p for p in save_path.glob("checkpoint_*") if p.is_dir())
+    if existing_ckpts:
+        latest_ckpt_dir = existing_ckpts[-1]
+        try:
+            ckpt_num = int(latest_ckpt_dir.name.split("_")[-1])
+            ckpt_file = latest_ckpt_dir / f"checkpoint-{ckpt_num}"
+            if ckpt_file.is_file():
+                trainer.restore(str(latest_ckpt_dir))
+                start_iter = ckpt_num + 1
+                print(f"[Resume] Restored {layout_name} from {latest_ckpt_dir.name} (resuming at iteration {start_iter}/{num_iters})")
+        except Exception as e:
+            print(f"[Resume] Notice: could not restore from {latest_ckpt_dir}: {e}")
+
     start_time = time.time()
     iter_durations: list[float] = []
 
-    for iteration in range(1, num_iters + 1):
+    for iteration in range(start_iter, num_iters + 1):
         iter_start = time.time()
         res = trainer.train()
         reward_mean = res.get("episode_reward_mean", 0.0) or 0.0
