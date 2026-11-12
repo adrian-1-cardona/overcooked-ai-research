@@ -34,11 +34,11 @@ import shutil
 def main() -> None:
     start_total = time.time()
     print("=" * 70)
-    print("ALL-MAPS FRAME-STACKED AGENT TRAINING PIPELINE")
+    print("ALL-MAPS FRAME-STACKED AGENT TRAINING PIPELINE (PARALLEL CONCURRENCY=2)")
     print("Layouts: cramped_room, asymmetric_advantages, coordination_ring,")
     print("         forced_coordination, counter_circuit_o_1order")
     print("Iterations per layout: 650")
-    print("Workers: 6")
+    print("Concurrency: 2 parallel layouts | Workers per layout: 4 (8 total workers)")
     print("=" * 70)
 
     # 1. Train frgreedy across all 5 layouts
@@ -51,7 +51,8 @@ def main() -> None:
         partner_type="greedy",
         partner_prob=1.0,
         num_iters=650,
-        num_workers=6,
+        num_workers=4,
+        max_concurrent=2,
         out_dir=REPO_ROOT / "models" / "frgreedy",
     )
     print(f"\n[PHASE 1 COMPLETE] frgreedy finished in {(time.time() - t0) / 60:.1f} minutes.\n")
@@ -59,6 +60,7 @@ def main() -> None:
     # 2. Train frppovgreedy across all 5 layouts
     print("\n" + "#" * 70)
     print("# [PHASE 2/2] TRAINING frppovgreedy (PPO Self-Play) ACROSS ALL MAPS")
+    print("# Concurrency: 2 parallel layouts | Workers per layout: 4 (8 total workers)")
     print("#" * 70 + "\n")
     t1 = time.time()
     train_multi_layout(
@@ -66,7 +68,8 @@ def main() -> None:
         partner_type="ppo",
         partner_prob=0.0,
         num_iters=650,
-        num_workers=6,
+        num_workers=4,
+        max_concurrent=2,
         out_dir=REPO_ROOT / "models" / "frppovgreedy",
     )
     print(f"\n[PHASE 2 COMPLETE] frppovgreedy finished in {(time.time() - t1) / 60:.1f} minutes.\n")

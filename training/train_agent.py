@@ -286,6 +286,51 @@ BENCHMARK_LAYOUTS = [
 import subprocess
 
 
+def compute_multi_layout_progress(
+    parent_dir: Path,
+    layouts: list[str],
+    num_iters: int,
+    current_layout: str,
+    current_iter: int,
+) -> tuple[int, int, float]:
+    """Compute true total completed iterations across all layouts in parent_dir.
+    Returns (overall_current_iters, overall_total_iters, overall_percent).
+    """
+    total_iters = len(layouts) * num_iters
+    completed_iters = 0
+    for l in layouts:
+        if l == current_layout:
+            completed_iters += current_iter
+            continue
+        l_status = parent_dir / l / "training_status.json"
+        if l_status.is_file():
+            try:
+                with open(l_status, "r", encoding="utf-8") as f:
+                    st = json.load(f)
+                    completed_iters += min(num_iters, st.get("layout_iter", st.get("current_iter", 0)))
+                continue
+            except Exception:
+                pass
+        meta = parent_dir / l / "metadata.json"
+        if meta.is_file():
+            try:
+                with open(meta, "r", encoding="utf-8") as f:
+                    if json.load(f).get("current_iter", 0) >= num_iters:
+                        completed_iters += num_iters
+                        continue
+            except Exception:
+                pass
+        ckpts = sorted((parent_dir / l).glob("checkpoint_*"))
+        if ckpts:
+            try:
+                c_num = int(ckpts[-1].name.split("_")[-1])
+                completed_iters += min(num_iters, c_num)
+            except Exception:
+                pass
+    pct = round((completed_iters / max(1, total_iters)) * 100.0, 1)
+    return completed_iters, total_iters, pct
+
+
 def train_single_layout(
     recipe: str = "ppo_greedy",
     layout_name: str = "cramped_room",
@@ -415,15 +460,25 @@ def train_single_layout(
         avg_iter_time = sum(window) / len(window)
 
         if is_multi:
-            overall_current_iter = (layout_index - 1) * num_iters + iteration
+            parent_p = Path(multi_layout_parent) if multi_layout_parent else save_path.parent
+            overall_current_iter, overall_total_iters, pct = compute_multi_layout_progress(
+                parent_dir=parent_p,
+                layouts=BENCHMARK_LAYOUTS,
+                num_iters=num_iters,
+                current_layout=layout_name,
+                current_iter=iteration,
+            )
             overall_remaining_iters = overall_total_iters - overall_current_iter
-            eta_seconds = max(0, int(overall_remaining_iters * avg_iter_time))
-            pct = round((overall_current_iter / overall_total_iters) * 100.0, 1)
+            layout_remaining_iters = num_iters - iteration
+            layout_eta_seconds = max(0, int(layout_remaining_iters * avg_iter_time))
+            # With concurrent layouts, pipeline completes faster
+            eta_seconds = max(0, int((overall_remaining_iters / 2.0) * avg_iter_time))
 
             print(
                 f"[{layout_name} {iteration:03d}/{num_iters:03d}] "
                 f"Overall: {overall_current_iter:03d}/{overall_total_iters:03d} ({pct}%) | "
-                f"Reward: {reward_mean:.2f} | ETA: {eta_seconds}s ({avg_iter_time:.1f}s/iter)"
+                f"Reward: {reward_mean:.2f} | Layout ETA: {layout_eta_seconds}s | Total ETA: {eta_seconds}s ({avg_iter_time:.1f}s/iter)",
+                flush=True,
             )
 
             update_status({
@@ -440,6 +495,7 @@ def train_single_layout(
                 "reward_mean": round(float(reward_mean), 2),
                 "percent": pct,
                 "eta_seconds": eta_seconds,
+                "layout_eta_seconds": layout_eta_seconds,
             }, status_dir)
         else:
             remaining_iters = num_iters - iteration
@@ -522,11 +578,12 @@ def train_multi_layout(
     partner_type: str = "greedy",
     partner_prob: float | None = None,
     num_iters: int = 650,
-    num_workers: int = 6,
+    num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
+    max_concurrent: int = 1,
 ) -> Path:
-    """Train an agent across all 5 benchmark layouts sequentially in clean processes."""
+    """Train an agent across all 5 benchmark layouts sequentially or concurrently."""
     save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_all_layouts"
     save_path.mkdir(parents=True, exist_ok=True)
 
@@ -535,7 +592,7 @@ def train_multi_layout(
     overall_total_iters = total_layouts * num_iters
     reward_means: dict[str, float] = {}
 
-    initial_eta = overall_total_iters * 2
+    initial_eta = int((overall_total_iters / max(1, max_concurrent)) * 2)
     update_status({
         "status": "training",
         "recipe": recipe,
@@ -568,37 +625,110 @@ def train_multi_layout(
         print("[Dry Run] Multi-layout dry run passed successfully!")
         return save_path
 
+    # First check for already completed layouts
+    pending_layouts: list[tuple[int, str]] = []
     for l_idx, target_layout in enumerate(layouts, 1):
-        print("\n" + "=" * 60)
-        print(f"[{l_idx}/{total_layouts}] TRAINING BENCHMARK LAYOUT: {target_layout}")
-        print("=" * 60)
-
         layout_out_dir = save_path / target_layout
-        venv_python = REPO_ROOT / "overcooked-agent-eval" / ".venv" / "bin" / "python"
-        python_bin = str(venv_python) if venv_python.is_file() else sys.executable
-        cmd = [
-            python_bin,
-            "-u",
-            "-m", "training.train_agent",
-            "--recipe", recipe,
-            "--partner-type", partner_type,
-            *(["--partner-prob", str(partner_prob)] if partner_prob is not None else []),
-            "--layout", target_layout,
-            "--iters", str(num_iters),
-            "--num-workers", str(num_workers),
-            "--out-dir", str(layout_out_dir),
-            "--layout-index", str(l_idx),
-            "--total-layouts", str(total_layouts),
-            "--multi-layout-parent", str(save_path),
-        ]
-        subprocess.run(cmd, cwd=str(REPO_ROOT), check=True)
-
         meta_file = layout_out_dir / "metadata.json"
-        if meta_file.is_file():
-            with open(meta_file, "r", encoding="utf-8") as f:
-                reward_means[target_layout] = json.load(f).get("reward_mean", 0.0)
-        else:
-            reward_means[target_layout] = 0.0
+        ckpts = sorted(layout_out_dir.glob("checkpoint_*"))
+        is_completed = False
+        if meta_file.is_file() and ckpts:
+            try:
+                ckpt_num = int(ckpts[-1].name.split("_")[-1])
+                if ckpt_num >= num_iters:
+                    with open(meta_file, "r", encoding="utf-8") as f:
+                        reward_means[target_layout] = json.load(f).get("reward_mean", 0.0)
+                    is_completed = True
+                    print(f"[Skip] {target_layout} already completed ({ckpt_num}/{num_iters} iters, reward: {reward_means[target_layout]:.2f}).")
+            except Exception:
+                pass
+        if not is_completed:
+            pending_layouts.append((l_idx, target_layout))
+
+    venv_python = REPO_ROOT / "overcooked-agent-eval" / ".venv" / "bin" / "python"
+    python_bin = str(venv_python) if venv_python.is_file() else sys.executable
+
+    if max_concurrent <= 1:
+        for l_idx, target_layout in pending_layouts:
+            print("\n" + "=" * 60)
+            print(f"[{l_idx}/{total_layouts}] TRAINING BENCHMARK LAYOUT: {target_layout}")
+            print("=" * 60)
+
+            layout_out_dir = save_path / target_layout
+            cmd = [
+                python_bin,
+                "-u",
+                "-m", "training.train_agent",
+                "--recipe", recipe,
+                "--partner-type", partner_type,
+                *(["--partner-prob", str(partner_prob)] if partner_prob is not None else []),
+                "--layout", target_layout,
+                "--iters", str(num_iters),
+                "--num-workers", str(num_workers),
+                "--out-dir", str(layout_out_dir),
+                "--layout-index", str(l_idx),
+                "--total-layouts", str(total_layouts),
+                "--multi-layout-parent", str(save_path),
+            ]
+            subprocess.run(cmd, cwd=str(REPO_ROOT), check=True)
+
+            meta_file = layout_out_dir / "metadata.json"
+            if meta_file.is_file():
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    reward_means[target_layout] = json.load(f).get("reward_mean", 0.0)
+            else:
+                reward_means[target_layout] = 0.0
+    else:
+        print(f"\n[Parallel] Running up to {max_concurrent} layouts concurrently ({num_workers} workers each)...")
+        active_procs: dict[str, tuple[int, subprocess.Popen]] = {}
+        pending_queue = list(pending_layouts)
+
+        while pending_queue or active_procs:
+            while len(active_procs) < max_concurrent and pending_queue:
+                l_idx, target_layout = pending_queue.pop(0)
+                layout_out_dir = save_path / target_layout
+                print(f"\n>>> [Parallel Launch] Layout [{l_idx}/{total_layouts}]: {target_layout} (workers={num_workers})")
+                cmd = [
+                    python_bin,
+                    "-u",
+                    "-m", "training.train_agent",
+                    "--recipe", recipe,
+                    "--partner-type", partner_type,
+                    *(["--partner-prob", str(partner_prob)] if partner_prob is not None else []),
+                    "--layout", target_layout,
+                    "--iters", str(num_iters),
+                    "--num-workers", str(num_workers),
+                    "--out-dir", str(layout_out_dir),
+                    "--layout-index", str(l_idx),
+                    "--total-layouts", str(total_layouts),
+                    "--multi-layout-parent", str(save_path),
+                ]
+                proc = subprocess.Popen(cmd, cwd=str(REPO_ROOT))
+                active_procs[target_layout] = (l_idx, proc)
+
+            time.sleep(2)
+
+            finished_layouts = []
+            for target_layout, (l_idx, proc) in active_procs.items():
+                ret = proc.poll()
+                if ret is not None:
+                    if ret != 0:
+                        raise RuntimeError(f"Training failed for {target_layout} with exit code {ret}")
+                    layout_out_dir = save_path / target_layout
+                    meta_file = layout_out_dir / "metadata.json"
+                    rm = 0.0
+                    if meta_file.is_file():
+                        try:
+                            with open(meta_file, "r", encoding="utf-8") as f:
+                                rm = json.load(f).get("reward_mean", 0.0)
+                        except Exception:
+                            pass
+                    reward_means[target_layout] = rm
+                    print(f"\n<<< [Parallel Complete] Layout [{l_idx}/{total_layouts}]: {target_layout} (Reward: {rm:.2f})")
+                    finished_layouts.append(target_layout)
+
+            for fl in finished_layouts:
+                del active_procs[fl]
 
     overall_avg_reward = round(sum(reward_means.values()) / max(1, len(reward_means)), 2)
 
@@ -664,13 +794,14 @@ def train(
     partner_type: str = "greedy",
     partner_prob: float | None = None,
     num_iters: int = 650,
-    num_workers: int = 6,
+    num_workers: int = 4,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
     layout_index: int | None = None,
     total_layouts: int | None = None,
     multi_layout_parent: str | Path | None = None,
     shutdown_at_end: bool = True,
+    max_concurrent: int = 1,
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
     if layout_name in ("all", "all_layouts", "all_maps"):
@@ -682,6 +813,7 @@ def train(
             num_workers=num_workers,
             out_dir=out_dir,
             dry_run=dry_run,
+            max_concurrent=max_concurrent,
         )
     return train_single_layout(
         recipe=recipe,
@@ -736,8 +868,14 @@ def main() -> None:
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=6,
-        help="Number of parallel rollout workers (default: 6)",
+        default=4,
+        help="Number of parallel rollout workers per layout (default: 4)",
+    )
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=1,
+        help="Maximum concurrent layouts to train in parallel (default: 1)",
     )
     parser.add_argument(
         "--out-dir",
@@ -782,6 +920,7 @@ def main() -> None:
         layout_index=args.layout_index,
         total_layouts=args.total_layouts,
         multi_layout_parent=args.multi_layout_parent,
+        max_concurrent=args.max_concurrent,
     )
 
 
