@@ -93,7 +93,7 @@ def build_trainer(
     layout_name: str = "cramped_room",
     partner_type: str = "greedy",
     partner_prob: float | None = None,
-    num_workers: int = 4,
+    num_workers: int = 6,
     lr: float = 2.5e-4,
     train_batch_size: int = 4800,
     sgd_minibatch_size: int = 800,
@@ -292,7 +292,7 @@ def train_single_layout(
     partner_type: str = "greedy",
     partner_prob: float | None = None,
     num_iters: int = 650,
-    num_workers: int = 4,
+    num_workers: int = 6,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
     layout_index: int | None = None,
@@ -503,7 +503,7 @@ def train_multi_layout(
     partner_type: str = "greedy",
     partner_prob: float | None = None,
     num_iters: int = 650,
-    num_workers: int = 4,
+    num_workers: int = 6,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
 ) -> Path:
@@ -645,7 +645,7 @@ def train(
     partner_type: str = "greedy",
     partner_prob: float | None = None,
     num_iters: int = 650,
-    num_workers: int = 4,
+    num_workers: int = 6,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
     layout_index: int | None = None,
@@ -717,8 +717,8 @@ def main() -> None:
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
-        help="Number of parallel rollout workers (default: 4)",
+        default=6,
+        help="Number of parallel rollout workers (default: 6)",
     )
     parser.add_argument(
         "--out-dir",
