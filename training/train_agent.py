@@ -359,6 +359,26 @@ def train_single_layout(
         }, status_dir)
         return save_path
 
+    reward_mean = 0.0
+    meta_file = save_path / "metadata.json"
+    if meta_file.is_file():
+        try:
+            with open(meta_file, "r", encoding="utf-8") as f:
+                reward_mean = json.load(f).get("reward_mean", 0.0)
+        except Exception:
+            pass
+
+    existing_ckpts = sorted(p for p in save_path.glob("checkpoint_*") if p.is_dir())
+    if existing_ckpts:
+        latest_ckpt_dir = existing_ckpts[-1]
+        try:
+            ckpt_num = int(latest_ckpt_dir.name.split("_")[-1])
+            if ckpt_num >= num_iters:
+                print(f"[Skip] {layout_name} already completed with {ckpt_num}/{num_iters} iterations (Reward: {reward_mean:.2f}).")
+                return save_path
+        except Exception:
+            pass
+
     trainer, meta = build_trainer(
         recipe=recipe,
         layout_name=layout_name,
@@ -369,7 +389,6 @@ def train_single_layout(
     )
 
     start_iter = 1
-    existing_ckpts = sorted(p for p in save_path.glob("checkpoint_*") if p.is_dir())
     if existing_ckpts:
         latest_ckpt_dir = existing_ckpts[-1]
         try:
