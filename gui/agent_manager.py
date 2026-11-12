@@ -316,18 +316,30 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             return _create_fallback_greedy_agent(mdp, agent_index), warning
 
         meta_file = model_path / "metadata.json"
+        layout_target_dir = model_path / layout_name
+        has_layout_ckpts = layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*"))
+        has_direct_ckpts = any(model_path.glob("checkpoint_*"))
+        has_sub_ckpts = any(model_path.rglob("checkpoint_*"))
+
         warning = None
-        if meta_file.is_file():
+        if meta_file.is_file() or has_layout_ckpts or has_direct_ckpts or has_sub_ckpts:
             import json
-            try:
-                with open(meta_file, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-            except Exception:
-                meta = {}
+            meta = {}
+            if meta_file.is_file():
+                try:
+                    with open(meta_file, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                except Exception:
+                    meta = {}
+            elif (model_path / "training_status.json").is_file():
+                try:
+                    with open(model_path / "training_status.json", "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                except Exception:
+                    meta = {}
             recipe = meta.get("recipe", "ppo_greedy")
 
             # Check if this model was trained on all maps or has layout subdirectories
-            layout_target_dir = model_path / layout_name
             if layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*")):
                 active_model_dir = layout_target_dir
                 active_meta_file = active_model_dir / "metadata.json"
