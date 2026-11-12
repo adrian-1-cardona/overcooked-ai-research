@@ -459,6 +459,24 @@ def train_single_layout(
             "eta_seconds": 0,
             "checkpoint_dir": str(checkpoint_dir),
         }, status_dir)
+        try:
+            from gui.agent_database import AgentDatabase
+            agent_1_type = "ppo"
+            agent_2_type = partner_type or "greedy"
+            agent_1_pct = 100 if partner_prob is None or partner_prob == 0 else int((1.0 - partner_prob) * 100)
+            agent_2_pct = 0 if partner_prob is None or partner_prob == 0 else int(partner_prob * 100)
+            AgentDatabase.add_agent(
+                name=save_path.name,
+                layout=layout_name,
+                checkpoint_path=save_path,
+                agent_1=agent_1_type,
+                agent_1_pct=agent_1_pct,
+                agent_2=agent_2_type,
+                agent_2_pct=agent_2_pct,
+                reward_mean=round(float(reward_mean), 2),
+            )
+        except Exception as e:
+            print(f"[Training] Notice: could not auto-register agent in AgentDatabase: {e}")
 
     if shutdown_at_end and ray.is_initialized():
         ray.shutdown()
@@ -578,6 +596,24 @@ def train_multi_layout(
         "eta_seconds": 0,
         "checkpoint_dir": str(save_path),
     }, save_path)
+    try:
+        from gui.agent_database import AgentDatabase
+        agent_1_type = "ppo"
+        agent_2_type = partner_type or "greedy"
+        agent_1_pct = 100 if partner_prob is None or partner_prob == 0 else int((1.0 - partner_prob) * 100)
+        agent_2_pct = 0 if partner_prob is None or partner_prob == 0 else int(partner_prob * 100)
+        AgentDatabase.add_agent(
+            name=save_path.name,
+            layout="all_layouts",
+            checkpoint_path=save_path,
+            agent_1=agent_1_type,
+            agent_1_pct=agent_1_pct,
+            agent_2=agent_2_type,
+            agent_2_pct=agent_2_pct,
+            reward_mean=round(float(overall_avg_reward), 2),
+        )
+    except Exception as e:
+        print(f"[Training] Notice: could not auto-register agent in AgentDatabase: {e}")
 
     print("\n" + "=" * 60)
     print(f"ALL-MAPS TRAINING COMPLETE FOR {recipe.upper()}!")

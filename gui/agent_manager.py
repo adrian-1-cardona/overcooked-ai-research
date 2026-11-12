@@ -439,44 +439,81 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
 
 
 def get_custom_trained_agents() -> list[tuple[str, str]]:
-    """Scan models/ directory for custom trained agent checkpoints."""
+    """Scan models/, results/, and AgentDatabase for custom trained agent checkpoints."""
+    from gui.agent_database import AgentDatabase, _is_agent_checkpoint_dir
+    records = AgentDatabase.load()
+
+    seen_paths: set[str] = set()
+    candidate_paths: list[Path] = []
+
+    # 1. From database records
+    for r in records:
+        ckpt_path_str = r.get("checkpoint_path")
+        if ckpt_path_str:
+            p = Path(ckpt_path_str)
+            if p.exists() and _is_agent_checkpoint_dir(p):
+                candidate_paths.append(p)
+
+    # 2. From models/ directory directly
     models_dir = REPO_ROOT / "models"
-    if not models_dir.is_dir():
-        return []
+    if models_dir.is_dir():
+        for p in sorted(models_dir.iterdir()):
+            if _is_agent_checkpoint_dir(p):
+                candidate_paths.append(p)
+
+    # 3. From results/ directory
+    results_dir = REPO_ROOT / "results"
+    if results_dir.is_dir():
+        for p in sorted(results_dir.iterdir()):
+            if not p.is_dir() or p.name.startswith("."):
+                continue
+            if _is_agent_checkpoint_dir(p):
+                candidate_paths.append(p)
+            try:
+                for sub in sorted(p.iterdir()):
+                    if _is_agent_checkpoint_dir(sub):
+                        candidate_paths.append(sub)
+            except Exception:
+                pass
 
     results: list[tuple[str, str]] = []
-    for p in sorted(models_dir.iterdir()):
-        if not p.is_dir() or p.name.startswith("."):
+    for p in candidate_paths:
+        resolved = str(p.resolve())
+        if resolved in seen_paths:
             continue
-        has_checkpoint = (
-            any(p.glob("checkpoint_*"))
-            or any(p.rglob("checkpoint_*"))
-            or (p / "config.pkl").is_file()
-            or (p / "metadata.json").is_file()
-        )
-        if has_checkpoint:
-            name = p.name
-            meta_file = p / "metadata.json"
-            is_all_layouts = False
-            if meta_file.is_file():
-                try:
-                    import json
-                    with open(meta_file, "r", encoding="utf-8") as f:
-                        meta = json.load(f)
-                    if meta.get("layout_name") in ("all_layouts", "all_maps"):
-                        is_all_layouts = True
-                except Exception:
-                    pass
+        if not _is_agent_checkpoint_dir(p):
+            continue
 
-            map_tag = " (All Maps)" if is_all_layouts else ""
-            if name in ("ppo_greedy", "ppo greedy"):
-                label = f"PPO Greedy{map_tag}"
-            elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
-                label = f"PPO v Greedy{map_tag}"
-            elif "ppo_sp" in name:
-                label = f"PPO Custom SP{map_tag}"
-            else:
-                label = f"PPO ({name}){map_tag}"
-            results.append((label, f"custom:{p.resolve()}"))
+        seen_paths.add(resolved)
+        name = p.name
+        meta_file = p / "metadata.json"
+        is_all_layouts = False
+        if meta_file.is_file():
+            try:
+                import json
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                if meta.get("layout_name") in ("all_layouts", "all_maps"):
+                    is_all_layouts = True
+            except Exception:
+                pass
+
+        map_tag = " (All Maps)" if is_all_layouts else ""
+        if name in ("ppo_greedy", "ppo greedy"):
+            label = f"PPO Greedy{map_tag}"
+        elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
+            label = f"PPO v Greedy{map_tag}"
+        elif name in ("frgreedy", "fr_greedy"):
+            label = f"PPO frGreedy (Frame Stack){map_tag}"
+        elif name in ("frppovgreedy", "fr_ppo_v_greedy", "frsp", "fr_sp"):
+            label = f"PPO frPPOvGreedy (Frame Stack){map_tag}"
+        elif "ppo_sp" in name:
+            label = f"PPO Custom SP{map_tag}"
+        elif "fr" in name.lower() or "stack" in name.lower():
+            clean_name = name.replace("_", " ").title()
+            label = f"PPO {clean_name} (Frame Stack){map_tag}"
+        else:
+            label = f"PPO ({name}){map_tag}"
+        results.append((label, f"custom:{resolved}"))
     return results
 
