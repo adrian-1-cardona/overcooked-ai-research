@@ -32,6 +32,7 @@ export MPLBACKEND="Agg"
 export SDL_VIDEODRIVER="dummy"
 export PYGAME_HIDE_SUPPORT_PROMPT="1"
 export TF_CPP_MIN_LOG_LEVEL="3"
+export GRPC_ENABLE_FORK_SUPPORT=0
 
 echo "======================================================================"
 echo " Stage 1/5: Evaluation Framework Tests (overcooked-agent-eval)"

@@ -74,10 +74,15 @@ Nine pairings × both seat orders × 20 seeds produce 360 episodes of 400 steps 
 `cramped_room`. Other layouts are outside this training run's evaluation scope.
 
 `results/frame_stacking/evaluation/episodes.csv` contains sparse delivery reward,
-soups, blocked moves toward walkable tiles, blocked moves toward walls, and long
+rewarded soups (score / 20), total soup deliveries, unrewarded deliveries,
+blocked moves toward walkable tiles, blocked moves toward walls, and long
 periods where both players remain stationary. Interactions are not counted as
 blocked movement. `summary.json` includes per-pair means and paired-seed bootstrap
 intervals for the key comparisons. Existing checkpoints are historical baselines;
 a causal frame-stacking claim needs matched single-frame retraining across
 multiple training seeds. The comparison with the mixed-partner PPO addresses
 whether a new agent helps that fixed PPO partner more than plain Greedy does.
+
+On `cramped_room`, only three-onion soups earn 20 points; smaller soups can be
+delivered for zero reward. The report distinguishes rewarded soups from total
+delivery events and includes per-seat pickup, potting and delivery counts.

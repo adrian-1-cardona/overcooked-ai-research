@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -72,9 +73,14 @@ def episode(names, policies, seed, horizon=400):
         joint_idle_steps += int(idle_streak >= 10)
         if done:
             break
+    events = {f"{event}_seat_{seat}": len(env.game_stats[event][seat])
+              for event in ("onion_pickup", "potting_onion", "dish_pickup", "soup_pickup", "soup_delivery", "soup_drop")
+              for seat in (0, 1)}
+    deliveries = events["soup_delivery_seat_0"] + events["soup_delivery_seat_1"]
     return {"score": float(score), "soups": score / 20,
+            "total_soup_deliveries": deliveries, "unrewarded_soup_deliveries": deliveries - score / 20,
             "partner_blocked_moves": partner_blocks, "wall_blocked_moves": wall_blocks,
-            "joint_stationary_steps_after_10": joint_idle_steps}
+            "joint_stationary_steps_after_10": joint_idle_steps, **events}
 
 
 def evaluate(checkpoints=CHECKPOINTS, pairings=PAIRINGS, seeds=range(20), output=OUTPUT):
@@ -102,7 +108,7 @@ def evaluate(checkpoints=CHECKPOINTS, pairings=PAIRINGS, seeds=range(20), output
         group = [r for r in rows if r["pairing"] == name]
         summary[name] = {"episodes": len(group), **{
             key: statistics.mean(row[key] for row in group)
-            for key in ("score", "soups", "partner_blocked_moves", "wall_blocked_moves", "joint_stationary_steps_after_10")
+            for key in group[0] if key not in ("pairing", "swapped", "seed")
         }, "score_stdev": statistics.stdev(row["score"] for row in group)}
     comparisons = {}
     rng = np.random.default_rng(2026)
@@ -125,7 +131,15 @@ def evaluate(checkpoints=CHECKPOINTS, pairings=PAIRINGS, seeds=range(20), output
             "paired_seed_bootstrap_95pct": np.quantile(boot, [.025, .975]).tolist(),
         }
     report = {"layout": "cramped_room", "horizon": 400, "seeds": list(seeds),
-              "checkpoints": {k: str(v) for k, v in checkpoints.items()},
+              "checkpoints": {k: str(v.relative_to(ROOT)) for k, v in checkpoints.items()},
+              "evaluation_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              "policy_details": {name: {
+                  "input_shape": list(policy.model.base_model.input_shape[1:]),
+                  "parameters": policy.model.base_model.count_params(),
+                  "first_convolution_parameters": policy.model.base_model.get_layer("conv_initial").count_params(),
+                  "settings": {key: policy.config.get(key) for key in
+                               ("seed", "lr", "gamma", "lambda", "num_sgd_iter", "train_batch_size", "sgd_minibatch_size", "rollout_fragment_length")},
+              } for name, policy in policies.items()},
               "summary": summary, "comparisons": comparisons,
               "limits": "One training seed per model; existing checkpoints are historical baselines, not a controlled multi-seed ablation. Stationary steps can include useful interactions or cooking waits."}
     (output / "summary.json").write_text(json.dumps(report, indent=2))
