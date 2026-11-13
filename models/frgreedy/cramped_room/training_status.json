@@ -1,0 +1,11 @@
+{
+  "status": "initializing",
+  "recipe": "ppo_greedy",
+  "layout": "cramped_room",
+  "current_layout": "cramped_room",
+  "current_iter": 0,
+  "total_iters": 650,
+  "reward_mean": 0.0,
+  "percent": 0.0,
+  "eta_seconds": 1300
+}

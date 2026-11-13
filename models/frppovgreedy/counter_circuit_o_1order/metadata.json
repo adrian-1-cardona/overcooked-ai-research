@@ -1,0 +1,10 @@
+{
+  "recipe": "ppo_sp",
+  "layout_name": "counter_circuit_o_1order",
+  "partner_type": "ppo",
+  "partner_prob": 0.0,
+  "current_iter": 650,
+  "total_iters": 650,
+  "reward_mean": 212.29,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/frppovgreedy/counter_circuit_o_1order/checkpoint_000650"
+}

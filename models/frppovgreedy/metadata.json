@@ -1,0 +1,24 @@
+{
+  "recipe": "ppo_sp",
+  "layout_name": "all_layouts",
+  "layouts": [
+    "cramped_room",
+    "asymmetric_advantages",
+    "coordination_ring",
+    "forced_coordination",
+    "counter_circuit_o_1order"
+  ],
+  "partner_type": "ppo",
+  "partner_prob": 0.0,
+  "current_iter": 3250,
+  "total_iters": 3250,
+  "reward_mean": 381.21,
+  "reward_means": {
+    "asymmetric_advantages": 525.02,
+    "cramped_room": 407.98,
+    "coordination_ring": 462.17,
+    "forced_coordination": 298.6,
+    "counter_circuit_o_1order": 212.29
+  },
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/frppovgreedy"
+}

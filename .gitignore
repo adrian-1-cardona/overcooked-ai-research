@@ -12,3 +12,5 @@ results/last_render_run.csv
 results/frame_stacking/
 tmp/
 scratch/
+models/**/logs/
+*.metadata_never_index
