@@ -26,13 +26,13 @@ DEFAULT_CSV = Path("results/matrix.csv")
 
 # Standardized Publication Nomenclature
 DISPLAY_NAME_MAP = {
-    "frppovgreedy": "PPO (FrameStack) [Self+Greedy]",
-    "frgreedy": "PPO (FrameStack) [Greedy]",
-    "ppo_v_greedy": "PPO (Baseline) [Self+Greedy]",
-    "ppo_greedy": "PPO (Baseline) [Greedy]",
-    "ppo_sp": "PPO (Baseline) [Self-Play]",
-    "greedy": "Greedy",
-    "random": "Random",
+    "frppovgreedy": "fr[self,greedy]",
+    "frgreedy": "fr[greedy]",
+    "ppo_v_greedy": "ppo[self,greedy]",
+    "ppo_greedy": "ppo[greedy]",
+    "ppo_sp": "ppo[self]",
+    "greedy": "greedy",
+    "random": "random",
 }
 
 REVERSE_DISPLAY_MAP = {v: k for k, v in DISPLAY_NAME_MAP.items()}
@@ -80,9 +80,9 @@ preset = st.sidebar.selectbox(
     options=[
         "Custom Selection",
         "Full Matrix (All 6 Agents)",
-        "FrameStack Focus (Ours vs Baseline & Greedy)",
-        "Curriculum Comparison (FrameStack vs Baseline)",
-        "Partner Test with Greedy",
+        "FrameStack Focus (fr vs ppo & greedy)",
+        "Curriculum Comparison (fr[self,greedy] vs ppo[self,greedy])",
+        "Partner Test with greedy",
     ],
     index=0,
 )
@@ -91,13 +91,13 @@ preset = st.sidebar.selectbox(
 if preset == "Full Matrix (All 6 Agents)":
     default_rows = all_display_agents
     default_cols = all_display_agents
-elif preset == "FrameStack Focus (Ours vs Baseline & Greedy)":
+elif preset == "FrameStack Focus (fr vs ppo & greedy)":
     default_rows = [get_display_name("frppovgreedy"), get_display_name("frgreedy")]
     default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "ppo_v_greedy", "frppovgreedy"]]
-elif preset == "Curriculum Comparison (FrameStack vs Baseline)":
+elif preset == "Curriculum Comparison (fr[self,greedy] vs ppo[self,greedy])":
     default_rows = [get_display_name("frppovgreedy"), get_display_name("ppo_v_greedy")]
     default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "frppovgreedy", "ppo_v_greedy"]]
-elif preset == "Partner Test with Greedy":
+elif preset == "Partner Test with greedy":
     default_rows = [get_display_name(a) for a in ["frppovgreedy", "ppo_v_greedy", "ppo_sp", "greedy"]]
     default_cols = [get_display_name("greedy"), get_display_name("ppo_sp")]
 else:
@@ -211,7 +211,7 @@ def render_matrix(
 # Main Dashboard Tabs
 # -----------------------------------------------------------------------------
 tab_labels = (
-    ["📊 Consolidated (Macro)", "⚡ Side-by-Side: FrameStack vs Baseline"]
+    ["📊 Consolidated (Macro)", "⚡ Side-by-Side: fr vs ppo"]
     + [f"🗺️ {lvl}" for lvl in selected_levels]
     + ["📋 Raw Data"]
 )
@@ -237,11 +237,11 @@ with tabs[0]:
         subtitle=f"Averaged across {len(selected_levels)} layout(s): {', '.join(selected_levels)}",
     )
 
-# 2. Side-by-Side Comparison Tab: Frame Stack vs Baseline
+# 2. Side-by-Side Comparison Tab: fr vs ppo Baseline
 with tabs[1]:
-    st.subheader("Direct Comparison: FrameStack vs Baseline")
+    st.subheader("Direct Comparison: fr vs ppo Baseline")
     st.markdown(
-        "Directly isolates our FrameStack agent against the standard Baseline agent "
+        "Directly isolates **`fr[self,greedy]`** against the baseline **`ppo[self,greedy]`** "
         "paired with foreign partners across the selected levels."
     )
 
@@ -342,11 +342,11 @@ with st.expander("📖 Scientific Notes & Reading Guide", expanded=False):
     st.markdown(
         """
         - **Nomenclature Guide:**
-          - `PPO (FrameStack) [Self+Greedy]`: Our multi-layout Frame-Stack policy trained on a 50/50 mix of Self-Play and Greedy.
-          - `PPO (FrameStack) [Greedy]`: Frame-Stack policy trained 100% against Greedy partner (Phase 1).
-          - `PPO (Baseline) [Self+Greedy]`: Standard single-frame baseline trained on a 50/50 mix.
-          - `PPO (Baseline) [Self-Play]`: Standard single-frame Self-Play baseline.
-          - `Greedy`: Algorithmic heuristic A* planner (not a neural network).
+          - `fr[self,greedy]`: Multi-layout Frame-Stack policy trained on 50/50 mix of Self-Play and Greedy.
+          - `fr[greedy]`: Frame-Stack policy trained 100% against Greedy partner (Phase 1).
+          - `ppo[self,greedy]`: Baseline single-frame policy trained on 50/50 mix.
+          - `ppo[self]`: Baseline Self-Play policy.
+          - `greedy`: Algorithmic heuristic A* planner (not a neural network).
         - **Non-Square Matrices:** Rows and Columns do not need to match. You can inspect isolated 2×3 or 1×6 comparisons.
         - **Role Asymmetry:** Chef 0 (Red) starts on the left primary station; Chef 1 (Blue) starts on the right support station.
         """

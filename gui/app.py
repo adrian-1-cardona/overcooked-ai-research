@@ -328,8 +328,9 @@ class OvercookedApp:
                         layout = r.get("layout", "")
                         map_tag = " (All Maps)" if layout in ("all_layouts", "all_maps") else ""
                         is_fr = "fr" in name.lower() or "stack" in name.lower()
-                        fr_tag = " (Frame Stack)" if is_fr else ""
-                        label = f"PPO {name}{fr_tag}{map_tag}"
+                        prefix = "fr" if is_fr else "ppo"
+                        clean_n = name.replace("fr", "").replace("ppo", "").strip("_")
+                        label = f"{prefix}[{clean_n}]" if clean_n else name
                         custom.append((label, val))
                         existing_vals.add(val)
         except Exception:
@@ -368,8 +369,8 @@ class OvercookedApp:
     def _get_matrix_agent_options(self) -> list[tuple[str, str]]:
         """Return list of (agent_id, display_label) for Matrix Mode benchmarks."""
         options: list[tuple[str, str]] = [
-            ("ppo_sp", "PPO (Self-Play)"),
-            ("greedy", "Greedy Chef"),
+            ("ppo_sp", "ppo[self]"),
+            ("greedy", "greedy"),
         ]
         seen = {"ppo_sp", "greedy", "random"}
 

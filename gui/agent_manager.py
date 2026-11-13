@@ -518,22 +518,21 @@ def get_custom_trained_agents() -> list[tuple[str, str]]:
         if has_multi_layouts:
             is_all_layouts = True
 
-        map_tag = " (All Maps)" if is_all_layouts else ""
         if name in ("ppo_greedy", "ppo greedy"):
-            label = f"PPO Greedy{map_tag}"
+            label = "ppo[greedy]"
         elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
-            label = f"PPO v Greedy{map_tag}"
+            label = "ppo[self,greedy]"
         elif name in ("frgreedy", "fr_greedy"):
-            label = f"PPO frGreedy (Frame Stack){map_tag}"
+            label = "fr[greedy]"
         elif name in ("frppovgreedy", "fr_ppo_v_greedy", "frsp", "fr_sp"):
-            label = f"PPO frPPOvGreedy (Frame Stack){map_tag}"
+            label = "fr[self,greedy]"
         elif "ppo_sp" in name:
-            label = f"PPO Custom SP{map_tag}"
+            label = "ppo[self]"
         elif "fr" in name.lower() or "stack" in name.lower():
-            clean_name = name.replace("_", " ").title()
-            label = f"PPO {clean_name} (Frame Stack){map_tag}"
+            clean_name = name.replace("_", " ").lower()
+            label = f"fr[{clean_name}]"
         else:
-            label = f"PPO ({name}){map_tag}"
+            label = f"ppo[{name}]"
         results.append((label, f"custom:{resolved}"))
     return results
 
