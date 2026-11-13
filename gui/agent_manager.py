@@ -422,6 +422,11 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 return _create_fallback_greedy_agent(mdp, agent_index), warning
 
     else:
+        # Check if agent_type matches any display label from get_custom_trained_agents()
+        for label, val in get_custom_trained_agents():
+            if agent_type.lower() == label.lower():
+                return create_agent(val, agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+
         # Check if agent_type corresponds to an entry in AgentDatabase or a folder in models/
         models_dir = REPO_ROOT / "models"
         resolved_path = None
