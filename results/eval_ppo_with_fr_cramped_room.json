@@ -1,0 +1,192 @@
+{
+  "Bundled PPO + Bundled PPO (Self-Play baseline)": {
+    "mean_score": 0.0,
+    "std_score": 0.0,
+    "scores": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "mean_soups": 0.0,
+    "mean_blocks": 80.8,
+    "mean_idles": 75.8
+  },
+  "Bundled PPO + Stateless Greedy": {
+    "mean_score": 38.0,
+    "std_score": 26.0,
+    "scores": [
+      20.0,
+      60.0,
+      20.0,
+      20.0,
+      20.0,
+      40.0,
+      100.0,
+      20.0,
+      20.0,
+      60.0
+    ],
+    "mean_soups": 1.9,
+    "mean_blocks": 56.6,
+    "mean_idles": 0.2
+  },
+  "Bundled PPO + Frame-Stacked Greedy (frgreedy)": {
+    "mean_score": 2.0,
+    "std_score": 6.0,
+    "scores": [
+      0.0,
+      0.0,
+      20.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "mean_soups": 0.1,
+    "mean_blocks": 47.6,
+    "mean_idles": 78.4
+  },
+  "Bundled PPO + Frame-Stacked PPO (frppovgreedy)": {
+    "mean_score": 16.0,
+    "std_score": 14.966629547095765,
+    "scores": [
+      40.0,
+      40.0,
+      20.0,
+      0.0,
+      20.0,
+      20.0,
+      0.0,
+      0.0,
+      20.0,
+      0.0
+    ],
+    "mean_soups": 0.8,
+    "mean_blocks": 42.4,
+    "mean_idles": 134.0
+  },
+  "PPO (26-ch) + Frame-Stacked Greedy (frgreedy)": {
+    "mean_score": 6.0,
+    "std_score": 12.806248474865697,
+    "scores": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      40.0,
+      20.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "mean_soups": 0.3,
+    "mean_blocks": 95.2,
+    "mean_idles": 135.9
+  },
+  "PPO (26-ch) + Frame-Stacked PPO (frppovgreedy)": {
+    "mean_score": 24.0,
+    "std_score": 12.0,
+    "scores": [
+      20.0,
+      40.0,
+      20.0,
+      20.0,
+      40.0,
+      20.0,
+      20.0,
+      40.0,
+      20.0,
+      0.0
+    ],
+    "mean_soups": 1.2,
+    "mean_blocks": 110.5,
+    "mean_idles": 211.4
+  },
+  "Frame-Stacked PPO (frppovgreedy) + Stateless Greedy": {
+    "mean_score": 120.0,
+    "std_score": 58.65151319446072,
+    "scores": [
+      180.0,
+      120.0,
+      140.0,
+      160.0,
+      80.0,
+      180.0,
+      180.0,
+      20.0,
+      20.0,
+      120.0
+    ],
+    "mean_soups": 6.0,
+    "mean_blocks": 60.5,
+    "mean_idles": 0.0
+  },
+  "Frame-Stacked Greedy (frgreedy) + Stateless Greedy": {
+    "mean_score": 12.0,
+    "std_score": 24.0,
+    "scores": [
+      0.0,
+      20.0,
+      0.0,
+      20.0,
+      0.0,
+      80.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "mean_soups": 0.6,
+    "mean_blocks": 54.9,
+    "mean_idles": 0.0
+  },
+  "Frame-Stacked PPO + Frame-Stacked PPO (Self-Play)": {
+    "mean_score": 104.0,
+    "std_score": 46.3033476111609,
+    "scores": [
+      20.0,
+      20.0,
+      120.0,
+      120.0,
+      100.0,
+      100.0,
+      120.0,
+      120.0,
+      160.0,
+      160.0
+    ],
+    "mean_soups": 5.2,
+    "mean_blocks": 61.2,
+    "mean_idles": 15.4
+  },
+  "Frame-Stacked PPO + Frame-Stacked Greedy": {
+    "mean_score": 4.0,
+    "std_score": 8.0,
+    "scores": [
+      0.0,
+      20.0,
+      0.0,
+      0.0,
+      20.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "mean_soups": 0.2,
+    "mean_blocks": 17.6,
+    "mean_idles": 149.1
+  }
+}

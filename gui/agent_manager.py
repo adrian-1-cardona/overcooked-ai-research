@@ -500,6 +500,7 @@ def get_custom_trained_agents() -> list[tuple[str, str]]:
         name = p.name
         meta_file = p / "metadata.json"
         is_all_layouts = False
+        has_multi_layouts = any((p / l).is_dir() for l in ("cramped_room", "asymmetric_advantages"))
         if meta_file.is_file():
             try:
                 import json
@@ -509,6 +510,8 @@ def get_custom_trained_agents() -> list[tuple[str, str]]:
                     is_all_layouts = True
             except Exception:
                 pass
+        if has_multi_layouts:
+            is_all_layouts = True
 
         map_tag = " (All Maps)" if is_all_layouts else ""
         if name in ("ppo_greedy", "ppo greedy"):
