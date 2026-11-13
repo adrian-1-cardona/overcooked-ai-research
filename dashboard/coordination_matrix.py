@@ -26,11 +26,11 @@ DEFAULT_CSV = Path("results/matrix.csv")
 
 # Standardized Publication Nomenclature
 DISPLAY_NAME_MAP = {
-    "frppovgreedy": "PPO_FS[self,greedy]",
-    "frgreedy": "PPO_FS[greedy]",
-    "ppo_v_greedy": "PPO_26ch[self,greedy]",
-    "ppo_greedy": "PPO_26ch[greedy]",
-    "ppo_sp": "PPO_26ch[self]",
+    "frppovgreedy": "PPO (FrameStack) [Self+Greedy]",
+    "frgreedy": "PPO (FrameStack) [Greedy]",
+    "ppo_v_greedy": "PPO (Baseline) [Self+Greedy]",
+    "ppo_greedy": "PPO (Baseline) [Greedy]",
+    "ppo_sp": "PPO (Baseline) [Self-Play]",
     "greedy": "Greedy",
     "random": "Random",
 }
@@ -80,8 +80,8 @@ preset = st.sidebar.selectbox(
     options=[
         "Custom Selection",
         "Full Matrix (All 6 Agents)",
-        "Frame Stack Focus (PPO_FS vs Baseline & Greedy)",
-        "Curriculum Comparison (PPO[self,greedy] FS vs 26ch)",
+        "FrameStack Focus (Ours vs Baseline & Greedy)",
+        "Curriculum Comparison (FrameStack vs Baseline)",
         "Partner Test with Greedy",
     ],
     index=0,
@@ -91,10 +91,10 @@ preset = st.sidebar.selectbox(
 if preset == "Full Matrix (All 6 Agents)":
     default_rows = all_display_agents
     default_cols = all_display_agents
-elif preset == "Frame Stack Focus (PPO_FS vs Baseline & Greedy)":
+elif preset == "FrameStack Focus (Ours vs Baseline & Greedy)":
     default_rows = [get_display_name("frppovgreedy"), get_display_name("frgreedy")]
     default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "ppo_v_greedy", "frppovgreedy"]]
-elif preset == "Curriculum Comparison (PPO[self,greedy] FS vs 26ch)":
+elif preset == "Curriculum Comparison (FrameStack vs Baseline)":
     default_rows = [get_display_name("frppovgreedy"), get_display_name("ppo_v_greedy")]
     default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "frppovgreedy", "ppo_v_greedy"]]
 elif preset == "Partner Test with Greedy":
@@ -211,7 +211,7 @@ def render_matrix(
 # Main Dashboard Tabs
 # -----------------------------------------------------------------------------
 tab_labels = (
-    ["📊 Consolidated (Macro)", "⚡ Side-by-Side: FS vs 26ch"]
+    ["📊 Consolidated (Macro)", "⚡ Side-by-Side: FrameStack vs Baseline"]
     + [f"🗺️ {lvl}" for lvl in selected_levels]
     + ["📋 Raw Data"]
 )
@@ -237,11 +237,11 @@ with tabs[0]:
         subtitle=f"Averaged across {len(selected_levels)} layout(s): {', '.join(selected_levels)}",
     )
 
-# 2. Side-by-Side Comparison Tab: Frame Stack vs 26ch Baseline
+# 2. Side-by-Side Comparison Tab: Frame Stack vs Baseline
 with tabs[1]:
-    st.subheader("Direct Comparison: Frame Stack (104ch) vs Baseline (26ch)")
+    st.subheader("Direct Comparison: FrameStack vs Baseline")
     st.markdown(
-        "Directly isolates **`PPO_FS[self,greedy]`** against the 26-channel baseline **`PPO_26ch[self,greedy]`** "
+        "Directly isolates our FrameStack agent against the standard Baseline agent "
         "paired with foreign partners across the selected levels."
     )
 
@@ -342,10 +342,10 @@ with st.expander("📖 Scientific Notes & Reading Guide", expanded=False):
     st.markdown(
         """
         - **Nomenclature Guide:**
-          - `PPO_FS[self,greedy]`: Multi-layout Frame-Stack (104ch) policy trained on a 50/50 mix of Self-Play and Greedy.
-          - `PPO_FS[greedy]`: Frame-Stack policy trained 100% against Greedy partner (Phase 1).
-          - `PPO_26ch[self,greedy]`: Single-frame (26ch) baseline trained on a 50/50 mix.
-          - `PPO_26ch[self]`: Standard Self-Play baseline.
+          - `PPO (FrameStack) [Self+Greedy]`: Our multi-layout Frame-Stack policy trained on a 50/50 mix of Self-Play and Greedy.
+          - `PPO (FrameStack) [Greedy]`: Frame-Stack policy trained 100% against Greedy partner (Phase 1).
+          - `PPO (Baseline) [Self+Greedy]`: Standard single-frame baseline trained on a 50/50 mix.
+          - `PPO (Baseline) [Self-Play]`: Standard single-frame Self-Play baseline.
           - `Greedy`: Algorithmic heuristic A* planner (not a neural network).
         - **Non-Square Matrices:** Rows and Columns do not need to match. You can inspect isolated 2×3 or 1×6 comparisons.
         - **Role Asymmetry:** Chef 0 (Red) starts on the left primary station; Chef 1 (Blue) starts on the right support station.
