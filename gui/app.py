@@ -1,4 +1,4 @@
-"""Main interactive application window for Overcooked-AI Runner.
+"""Main interactive application window for Overcooked-AI.
 
 Provides:
 - Live Overcooked gameplay rendering filling the entire left pane.
@@ -172,7 +172,7 @@ class OvercookedApp:
         self.window = pygame.display.set_mode(
             (self.window_width, self.window_height), pygame.RESIZABLE
         )
-        pygame.display.set_caption("Overcooked-AI Runner")
+        pygame.display.set_caption("Overcooked-AI Research Platform")
 
         self.clock = pygame.time.Clock()
         self.running = True
@@ -238,10 +238,12 @@ class OvercookedApp:
         self.matrix_streamlit_proc: subprocess.Popen[Any] | None = None
         self.matrix_thread: threading.Thread | None = None
         self.matrix_agents = {
+            "frppovgreedy": True,
+            "frgreedy": True,
+            "ppo_v_greedy": True,
+            "ppo_greedy": True,
             "ppo_sp": True,
             "greedy": True,
-            "ppo_greedy": True,
-            "ppo_v_greedy": True,
             "random": False,
         }
         self.matrix_agent_checkboxes: dict[str, UICheckbox] = {}
@@ -1506,7 +1508,8 @@ class OvercookedApp:
             "--agents", *agents,
             "--levels", *levels,
             "-k", str(k),
-            "--horizon", "200",
+            "--horizon", "400",
+            "--workers", str(min(5, len(levels))),
         ]
 
         try:
@@ -1959,7 +1962,7 @@ class OvercookedApp:
                         UIBanner.draw(self.window, banner_rect, b_text, bg_color=BG_CARD_ALT, text_color=TEXT_PRIMARY, font_size=12, bold=True)
 
         elif self.active_mode == "matrix":
-            # Matrix Benchmark Dashboard Canvas in RetroUI Style
+            # Matrix Benchmark Dashboard Canvas
             card_w = min(680, self.game_pane_width - 80)
             card_h = min(540, self.window_height - 100)
             card_x = (self.game_pane_width - card_w) // 2
@@ -2050,7 +2053,7 @@ class OvercookedApp:
         )
 
         # ----------------------------------------------------
-        # 2. Right Control Sidebar (RetroUI Style)
+        # 2. Right Control Sidebar
         # ----------------------------------------------------
         sb_start_x = self.game_pane_width
         sb_x = self.game_pane_width + 16
@@ -2544,7 +2547,7 @@ class OvercookedApp:
 
     def run(self) -> None:
         """Main application execution loop."""
-        print("[GUI] Overcooked-AI Interactive Runner is ready.")
+        print("[GUI] Overcooked-AI Research Platform is ready.")
         sim_accumulator = 0.0
         try:
             while self.running:
