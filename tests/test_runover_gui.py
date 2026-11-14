@@ -29,11 +29,20 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 
 
 class TestOvercookedGUI(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        pygame.init()
+        pygame.font.init()
+
     def setUp(self) -> None:
+        if not pygame.get_init():
+            pygame.init()
+        if not pygame.font.get_init():
+            pygame.font.init()
         self.app = OvercookedApp(initial_layout="cramped_room", horizon=10)
 
     def tearDown(self) -> None:
-        pygame.display.quit()
+        pass
 
     def test_initial_state(self) -> None:
         self.assertEqual(self.app.state, AppState.SETUP)

@@ -9,5 +9,8 @@ __pycache__/
 overcooked-agent-eval/results/*
 !overcooked-agent-eval/results/.gitkeep
 results/last_render_run.csv
+results/frame_stacking/
 tmp/
 scratch/
+models/**/logs/
+*.metadata_never_index

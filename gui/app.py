@@ -1,4 +1,4 @@
-"""Main interactive application window for Overcooked-AI Runner.
+"""Main interactive application window for Overcooked-AI.
 
 Provides:
 - Live Overcooked gameplay rendering filling the entire left pane.
@@ -172,7 +172,7 @@ class OvercookedApp:
         self.window = pygame.display.set_mode(
             (self.window_width, self.window_height), pygame.RESIZABLE
         )
-        pygame.display.set_caption("Overcooked-AI Runner")
+        pygame.display.set_caption("Overcooked-AI Research Platform")
 
         self.clock = pygame.time.Clock()
         self.running = True
@@ -238,10 +238,12 @@ class OvercookedApp:
         self.matrix_streamlit_proc: subprocess.Popen[Any] | None = None
         self.matrix_thread: threading.Thread | None = None
         self.matrix_agents = {
+            "frppovgreedy": True,
+            "frgreedy": True,
+            "ppo_v_greedy": True,
+            "ppo_greedy": True,
             "ppo_sp": True,
             "greedy": True,
-            "ppo_greedy": True,
-            "ppo_v_greedy": True,
             "random": False,
         }
         self.matrix_agent_checkboxes: dict[str, UICheckbox] = {}
@@ -314,6 +316,26 @@ class OvercookedApp:
 
     def _get_full_agent_options(self) -> list[tuple[str, str]]:
         custom = get_custom_trained_agents()
+        existing_vals = {val for _, val in custom}
+        try:
+            records = AgentDatabase.load()
+            for r in records:
+                ckpt = r.get("checkpoint_path")
+                if ckpt:
+                    val = f"custom:{Path(ckpt).resolve()}"
+                    if val not in existing_vals:
+                        name = r.get("name") or r.get("id", "agent")
+                        layout = r.get("layout", "")
+                        map_tag = " (All Maps)" if layout in ("all_layouts", "all_maps") else ""
+                        is_fr = "fr" in name.lower() or "stack" in name.lower()
+                        prefix = "fr" if is_fr else "ppo"
+                        clean_n = name.replace("fr", "").replace("ppo", "").strip("_")
+                        label = f"{prefix}[{clean_n}]" if clean_n else name
+                        custom.append((label, val))
+                        existing_vals.add(val)
+        except Exception:
+            pass
+
         return [
             ("Human (Keyboard)", "human"),
             ("PPO (Pretrained RL)", "ppo"),
@@ -327,10 +349,10 @@ class OvercookedApp:
     def _refresh_agent_options(self) -> None:
         self.agent_options = self._get_full_agent_options()
         if hasattr(self, "dropdown_agent_0"):
-            self.dropdown_agent_0.options = self.agent_options
+            self.dropdown_agent_0.set_options(self.agent_options)
         if hasattr(self, "dropdown_agent_1"):
-            self.dropdown_agent_1.options = self.agent_options
-        custom = get_custom_trained_agents()
+            self.dropdown_agent_1.set_options(self.agent_options)
+        custom = [opt for opt in self.agent_options if opt[1].startswith("custom:")]
         train_opts = [
             ("PPO (Pretrained RL)", "ppo"),
             ("BC (Human Model)", "bc"),
@@ -339,16 +361,16 @@ class OvercookedApp:
             ("Random Chef", "random"),
         ]
         if hasattr(self, "dropdown_train_agent_1"):
-            self.dropdown_train_agent_1.options = train_opts
+            self.dropdown_train_agent_1.set_options(train_opts)
         if hasattr(self, "dropdown_train_agent_2"):
-            self.dropdown_train_agent_2.options = train_opts
+            self.dropdown_train_agent_2.set_options(train_opts)
         self._refresh_matrix_widgets()
 
     def _get_matrix_agent_options(self) -> list[tuple[str, str]]:
         """Return list of (agent_id, display_label) for Matrix Mode benchmarks."""
         options: list[tuple[str, str]] = [
-            ("ppo_sp", "PPO (Self-Play)"),
-            ("greedy", "Greedy Chef"),
+            ("ppo_sp", "ppo[self]"),
+            ("greedy", "greedy"),
         ]
         seen = {"ppo_sp", "greedy", "random"}
 
@@ -1214,8 +1236,11 @@ class OvercookedApp:
             elif agent_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning"):
                 if not is_ppo_supported(self.current_layout):
                     warns.append(f"Note: BC is not bundled for '{self.current_layout}'. Will use Greedy.")
-            elif agent_t.startswith("custom:"):
-                model_path = Path(agent_t[len("custom:"):])
+            elif agent_t.startswith("custom:") or (REPO_ROOT / "models" / agent_t).is_dir():
+                if agent_t.startswith("custom:"):
+                    model_path = Path(agent_t[len("custom:"):])
+                else:
+                    model_path = REPO_ROOT / "models" / agent_t
                 layout_target_dir = model_path / self.current_layout
                 has_layout_ckpt = layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*"))
                 has_direct_ckpt = any(model_path.glob("checkpoint_*"))
@@ -1421,6 +1446,7 @@ class OvercookedApp:
 
     def _on_mode_changed(self, new_mode: str) -> None:
         self.active_mode = new_mode
+        self._refresh_agent_options()
         if new_mode == "train":
             status_file = REPO_ROOT / "results" / "training_status.json"
             if status_file.is_file():
@@ -1483,7 +1509,8 @@ class OvercookedApp:
             "--agents", *agents,
             "--levels", *levels,
             "-k", str(k),
-            "--horizon", "200",
+            "--horizon", "400",
+            "--workers", str(min(5, len(levels))),
         ]
 
         try:
@@ -1639,6 +1666,16 @@ class OvercookedApp:
 
     def handle_events(self) -> None:
         """Process keyboard, mouse, and window events."""
+        if self.active_mode == "live":
+            is_locked = self.is_mid_run
+            self.dropdown_agent_0.is_enabled = not is_locked
+            self.dropdown_agent_1.is_enabled = not is_locked
+            self.dropdown_layout.is_enabled = not is_locked
+            if is_locked:
+                self.dropdown_agent_0.is_open = False
+                self.dropdown_agent_1.is_open = False
+                self.dropdown_layout.is_open = False
+
         events = pygame.event.get()
 
         for event in events:
@@ -1742,6 +1779,12 @@ class OvercookedApp:
                 dropdowns = [self.dropdown_agent_0, self.dropdown_agent_1, self.dropdown_layout]
 
                 if not is_locked:
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        for dd in (self.dropdown_agent_0, self.dropdown_agent_1):
+                            if dd.rect.collidepoint(event.pos) and not dd.is_open:
+                                self._refresh_agent_options()
+                                break
+
                     open_dd = next((dd for dd in dropdowns if dd.is_open), None)
                     if open_dd is not None:
                         consumed = open_dd.handle_event(event)
@@ -1920,7 +1963,7 @@ class OvercookedApp:
                         UIBanner.draw(self.window, banner_rect, b_text, bg_color=BG_CARD_ALT, text_color=TEXT_PRIMARY, font_size=12, bold=True)
 
         elif self.active_mode == "matrix":
-            # Matrix Benchmark Dashboard Canvas in RetroUI Style
+            # Matrix Benchmark Dashboard Canvas
             card_w = min(680, self.game_pane_width - 80)
             card_h = min(540, self.window_height - 100)
             card_x = (self.game_pane_width - card_w) // 2
@@ -2011,7 +2054,7 @@ class OvercookedApp:
         )
 
         # ----------------------------------------------------
-        # 2. Right Control Sidebar (RetroUI Style)
+        # 2. Right Control Sidebar
         # ----------------------------------------------------
         sb_start_x = self.game_pane_width
         sb_x = self.game_pane_width + 16
@@ -2026,9 +2069,6 @@ class OvercookedApp:
         font_title = FontManager.get_font(18, bold=True)
         title_surf = font_title.render("OVERCOOKED-AI", True, TEXT_PRIMARY)
         self.window.blit(title_surf, (sb_x, 14))
-        sub_font = FontManager.get_font(11, bold=False)
-        sub_surf = sub_font.render("Retro Runner", True, TEXT_MUTED)
-        self.window.blit(sub_surf, (sb_x + title_surf.get_width() + 10, 20))
 
         # Draw Top Switchbar (Live Match vs Matrix Test)
         self.switchbar.draw(self.window)
@@ -2508,7 +2548,7 @@ class OvercookedApp:
 
     def run(self) -> None:
         """Main application execution loop."""
-        print("[GUI] Overcooked-AI Interactive Runner is ready.")
+        print("[GUI] Overcooked-AI Research Platform is ready.")
         sim_accumulator = 0.0
         try:
             while self.running:

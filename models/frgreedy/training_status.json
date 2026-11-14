@@ -1,0 +1,12 @@
+{
+  "status": "completed",
+  "recipe": "ppo_greedy",
+  "layout": "all_layouts",
+  "current_layout": "all_layouts",
+  "current_iter": 3250,
+  "total_iters": 3250,
+  "reward_mean": 227.23,
+  "percent": 100.0,
+  "eta_seconds": 0,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/frgreedy"
+}
