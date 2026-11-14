@@ -422,6 +422,19 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 return _create_fallback_greedy_agent(mdp, agent_index), warning
 
     else:
+        # Check aliases for bracketed naming conventions
+        norm = agent_type.lower().replace(" ", "").replace("_", "")
+        if norm in ("ppo[fr,self,greedy]", "ppo[self,greedy,fr]", "ppofrselfgreedy", "pposelfgreedyfr", "fr[self,greedy]"):
+            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'frppovgreedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[fr,greedy]", "ppofrgreedy", "fr[greedy]"):
+            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'frgreedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[self,greedy]", "pposelfgreedy"):
+            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'ppo_v_greedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[greedy]", "ppogreedy"):
+            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'ppo_greedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[self]", "ppoself", "ppo_sp", "pposp"):
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+
         # Check if agent_type matches any display label from get_custom_trained_agents()
         for label, val in get_custom_trained_agents():
             if agent_type.lower() == label.lower():
@@ -523,14 +536,14 @@ def get_custom_trained_agents() -> list[tuple[str, str]]:
         elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
             label = "ppo[self,greedy]"
         elif name in ("frgreedy", "fr_greedy"):
-            label = "fr[greedy]"
+            label = "ppo[fr,greedy]"
         elif name in ("frppovgreedy", "fr_ppo_v_greedy", "frsp", "fr_sp"):
-            label = "fr[self,greedy]"
+            label = "ppo[fr,self,greedy]"
         elif "ppo_sp" in name:
             label = "ppo[self]"
         elif "fr" in name.lower() or "stack" in name.lower():
             clean_name = name.replace("_", " ").lower()
-            label = f"fr[{clean_name}]"
+            label = f"ppo[fr,{clean_name}]"
         else:
             label = f"ppo[{name}]"
         results.append((label, f"custom:{resolved}"))

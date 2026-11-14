@@ -26,8 +26,8 @@ DEFAULT_CSV = Path("results/matrix.csv")
 
 # Standardized Publication Nomenclature
 DISPLAY_NAME_MAP = {
-    "frppovgreedy": "fr[self,greedy]",
-    "frgreedy": "fr[greedy]",
+    "frppovgreedy": "ppo[fr,self,greedy]",
+    "frgreedy": "ppo[fr,greedy]",
     "ppo_v_greedy": "ppo[self,greedy]",
     "ppo_greedy": "ppo[greedy]",
     "ppo_sp": "ppo[self]",
@@ -80,8 +80,8 @@ preset = st.sidebar.selectbox(
     options=[
         "Custom Selection",
         "Full Matrix (All 6 Agents)",
-        "FrameStack Focus (fr vs ppo & greedy)",
-        "Curriculum Comparison (fr[self,greedy] vs ppo[self,greedy])",
+        "FrameStack Focus (ppo[fr,...] vs baseline & greedy)",
+        "Curriculum Comparison (ppo[fr,self,greedy] vs ppo[self,greedy])",
         "Partner Test with greedy",
     ],
     index=0,
@@ -91,10 +91,10 @@ preset = st.sidebar.selectbox(
 if preset == "Full Matrix (All 6 Agents)":
     default_rows = all_display_agents
     default_cols = all_display_agents
-elif preset == "FrameStack Focus (fr vs ppo & greedy)":
+elif preset == "FrameStack Focus (ppo[fr,...] vs baseline & greedy)":
     default_rows = [get_display_name("frppovgreedy"), get_display_name("frgreedy")]
     default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "ppo_v_greedy", "frppovgreedy"]]
-elif preset == "Curriculum Comparison (fr[self,greedy] vs ppo[self,greedy])":
+elif preset == "Curriculum Comparison (ppo[fr,self,greedy] vs ppo[self,greedy])":
     default_rows = [get_display_name("frppovgreedy"), get_display_name("ppo_v_greedy")]
     default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "frppovgreedy", "ppo_v_greedy"]]
 elif preset == "Partner Test with greedy":
@@ -237,11 +237,11 @@ with tabs[0]:
         subtitle=f"Averaged across {len(selected_levels)} layout(s): {', '.join(selected_levels)}",
     )
 
-# 2. Side-by-Side Comparison Tab: fr vs ppo Baseline
+# 2. Side-by-Side Comparison Tab: ppo[fr,...] vs Baseline
 with tabs[1]:
-    st.subheader("Direct Comparison: fr vs ppo Baseline")
+    st.subheader("Direct Comparison: ppo[fr,self,greedy] vs ppo[self,greedy]")
     st.markdown(
-        "Directly isolates **`fr[self,greedy]`** against the baseline **`ppo[self,greedy]`** "
+        "Directly isolates **`ppo[fr,self,greedy]`** against the baseline **`ppo[self,greedy]`** "
         "paired with foreign partners across the selected levels."
     )
 
@@ -342,10 +342,10 @@ with st.expander("📖 Scientific Notes & Reading Guide", expanded=False):
     st.markdown(
         """
         - **Nomenclature Guide:**
-          - `fr[self,greedy]`: Multi-layout Frame-Stack policy trained on 50/50 mix of Self-Play and Greedy.
-          - `fr[greedy]`: Frame-Stack policy trained 100% against Greedy partner (Phase 1).
-          - `ppo[self,greedy]`: Baseline single-frame policy trained on 50/50 mix.
-          - `ppo[self]`: Baseline Self-Play policy.
+          - `ppo[fr,self,greedy]`: Frame-Stack PPO policy trained on 50/50 mix of Self-Play and Greedy.
+          - `ppo[fr,greedy]`: Frame-Stack PPO policy trained 100% against Greedy partner (Phase 1).
+          - `ppo[self,greedy]`: Baseline single-frame PPO trained on 50/50 mix.
+          - `ppo[self]`: Baseline single-frame Self-Play PPO.
           - `greedy`: Algorithmic heuristic A* planner (not a neural network).
         - **Non-Square Matrices:** Rows and Columns do not need to match. You can inspect isolated 2×3 or 1×6 comparisons.
         - **Role Asymmetry:** Chef 0 (Red) starts on the left primary station; Chef 1 (Blue) starts on the right support station.
