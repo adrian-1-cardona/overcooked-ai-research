@@ -2,15 +2,15 @@
   "status": "training",
   "recipe": "ppo_bc",
   "layout": "all_layouts",
-  "current_layout": "cramped_room",
-  "layout_index": 1,
+  "current_layout": "asymmetric_advantages",
+  "layout_index": 2,
   "total_layouts": 5,
-  "current_iter": 15,
+  "current_iter": 1108,
   "total_iters": 3250,
-  "layout_iter": 15,
+  "layout_iter": 458,
   "layout_total_iters": 650,
-  "reward_mean": 24.83,
-  "percent": 0.5,
-  "eta_seconds": 4636,
-  "layout_eta_seconds": 1820
+  "reward_mean": 228.89,
+  "percent": 34.1,
+  "eta_seconds": 5122,
+  "layout_eta_seconds": 918
 }

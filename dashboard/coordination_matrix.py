@@ -28,11 +28,9 @@ DEFAULT_CSV = Path("results/matrix.csv")
 DISPLAY_NAME_MAP = {
     "ppo_fr_self": "ppo[fr,self]",
     "ppo_fr_bc": "ppo[fr,bc]",
-    "frppovgreedy": "ppo[fr,self,greedy]",
-    "frgreedy": "ppo[fr,greedy]",
-    "ppo_v_greedy": "ppo[self,greedy]",
-    "ppo_greedy": "ppo[greedy]",
     "ppo_sp": "ppo[self]",
+    "ppo_bc": "ppo[bc]",
+    "bc": "bc",
     "greedy": "greedy",
     "random": "random",
 }
@@ -82,8 +80,8 @@ preset = st.sidebar.selectbox(
     options=[
         "Custom Selection",
         "Full Matrix (All Agents)",
-        "FrameStack Focus (ppo[fr,self] vs ppo[self])",
-        "Benchmark Comparison (ppo[fr,self] vs ppo[self] & bc)",
+        "FrameStack vs Baseline (ppo[fr,self] vs ppo[self])",
+        "Human-Aware Comparison (ppo[fr,bc] vs ppo[bc] & bc)",
         "Partner Test with greedy",
     ],
     index=0,
@@ -362,11 +360,13 @@ with st.expander("📖 Scientific Notes & Reading Guide", expanded=False):
     st.markdown(
         """
         - **Nomenclature Guide:**
-          - `ppo[fr,self,greedy]`: Frame-Stack PPO policy trained on 50/50 mix of Self-Play and Greedy.
-          - `ppo[fr,greedy]`: Frame-Stack PPO policy trained 100% against Greedy partner (Phase 1).
-          - `ppo[self,greedy]`: Baseline single-frame PPO trained on 50/50 mix.
-          - `ppo[self]`: Baseline single-frame Self-Play PPO.
-          - `greedy`: Algorithmic heuristic A* planner (not a neural network).
+          - `ppo[fr,self]`: DeepMind Frame-Stack PPO policy ($k=4$, 104 ch) with Carroll et al. LSTM trained in Self-Play.
+          - `ppo[fr,bc]`: DeepMind Frame-Stack PPO policy ($k=4$, 104 ch) with Carroll et al. LSTM trained alongside Human BC model.
+          - `ppo[self]`: Carroll et al. (NeurIPS 2019) Self-Play recurrent LSTM baseline.
+          - `ppo[bc]`: Carroll et al. (NeurIPS 2019) Human-Aware PPO trained with Human BC model.
+          - `bc`: Human Behavior Cloning policy model.
+          - `greedy`: Algorithmic heuristic A* motion planner.
+          - `random`: Uniform random baseline.
         - **Non-Square Matrices:** Rows and Columns do not need to match. You can inspect isolated 2×3 or 1×6 comparisons.
         - **Role Asymmetry:** Chef 0 (Red) starts on the left primary station; Chef 1 (Blue) starts on the right support station.
         """
