@@ -37,7 +37,7 @@ def main() -> None:
     print(f"Layouts: {', '.join(BENCHMARK_LAYOUTS)}")
     print("Architecture: RllibLSTMPPOModel (CELL_SIZE=256) + Frame Stacking (104 ch)")
     print("Iterations per layout: 650")
-    print("Execution: 2 Layouts Concurrently (5 rollout workers each = 12 total active processes)")
+    print("Execution: Strict 1-by-1 Layout Sequential ('1 1 1 1 1' dedicated models, 8 rollout workers)")
     print("=" * 70)
 
     # 1. Train ppo_fr_self across all 5 layouts
@@ -50,8 +50,8 @@ def main() -> None:
         partner_type="ppo",
         partner_prob=0.0,
         num_iters=650,
-        num_workers=5,
-        max_concurrent=2,
+        num_workers=8,
+        max_concurrent=1,
         use_lstm=True,
         out_dir=REPO_ROOT / "models" / "ppo_fr_self",
     )
@@ -67,8 +67,8 @@ def main() -> None:
         partner_type="bc",
         partner_prob=0.5,
         num_iters=650,
-        num_workers=5,
-        max_concurrent=2,
+        num_workers=8,
+        max_concurrent=1,
         use_lstm=True,
         out_dir=REPO_ROOT / "models" / "ppo_fr_bc",
     )
