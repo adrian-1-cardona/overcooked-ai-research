@@ -2,15 +2,15 @@
   "status": "training",
   "recipe": "ppo_sp",
   "layout": "all_layouts",
-  "current_layout": "coordination_ring",
-  "layout_index": 3,
+  "current_layout": "counter_circuit_o_1order",
+  "layout_index": 5,
   "total_layouts": 5,
-  "current_iter": 1882,
+  "current_iter": 2820,
   "total_iters": 3250,
-  "layout_iter": 582,
+  "layout_iter": 220,
   "layout_total_iters": 650,
-  "reward_mean": 148.39,
-  "percent": 57.9,
-  "eta_seconds": 3078,
-  "layout_eta_seconds": 306
+  "reward_mean": 39.2,
+  "percent": 86.8,
+  "eta_seconds": 1261,
+  "layout_eta_seconds": 2523
 }

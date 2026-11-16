@@ -113,7 +113,7 @@ class TestTrainModeAndDB(unittest.TestCase):
 
         # 1. Setup view (Image 4)
         self.app.train_view = "setup"
-        self.assertEqual(self.app.train_agent_name, "ppo_fr_agent")
+        self.assertEqual(self.app.train_agent_name, "ppo[fr,self]")
         self.assertEqual(self.app.train_agent_1_pct, 50)
         self.assertEqual(self.app.train_agent_2_pct, 50)
 
@@ -129,7 +129,7 @@ class TestTrainModeAndDB(unittest.TestCase):
 
         # 3. Complete view (Image 2)
         self.app.train_view = "complete"
-        self.app.train_last_trained_name = "ppo_fr_agent"
+        self.app.train_last_trained_name = "ppo[fr,self]"
         self.app._draw_frame()
 
         # 4. Database view (Image 1)

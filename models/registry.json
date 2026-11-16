@@ -1,7 +1,7 @@
 [
   {
     "id": "ppo_fr_self",
-    "name": "ppo_fr_self",
+    "name": "ppo[fr,self]",
     "date_trained": "11/16/2026",
     "time_trained": "06:48",
     "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_fr_self",

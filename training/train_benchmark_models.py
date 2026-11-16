@@ -59,7 +59,7 @@ def main() -> None:
     )
     print(f"\n[PHASE 1 COMPLETE] ppo_fr_self finished in {(time.time() - t0) / 60:.1f} minutes.\n")
 
-    # 2. Train ppo_fr_bc across all 5 layouts
+    # 2. Train ppo_fr_bc across all 5 layouts (matching Carroll et al. 500-600 iters benchmark)
     print("\n" + "#" * 70)
     print("# [PHASE 2/2] TRAINING ppo_fr_bc (PPO + BC Human Model + LSTM) ACROSS ALL MAPS")
     print("#" * 70 + "\n")
@@ -68,7 +68,7 @@ def main() -> None:
         recipe="ppo_bc",
         partner_type="bc",
         partner_prob=0.5,
-        num_iters=650,
+        num_iters=550,
         num_workers=10,
         max_concurrent=1,
         use_lstm=True,

@@ -197,8 +197,8 @@ class OvercookedApp:
         self.train_agent_1_pct = 50
         self.train_agent_2 = "greedy"
         self.train_agent_2_pct = 50
-        self.train_agent_name = "ppo_fr_agent"
-        self.train_last_trained_name = "ppo_fr_agent"
+        self.train_agent_name = "ppo[fr,self]"
+        self.train_last_trained_name = "ppo[fr,self]"
         self.train_process: subprocess.Popen[Any] | None = None
         self.train_progress_cur = 0
         self.train_progress_total = 650
@@ -699,7 +699,7 @@ class OvercookedApp:
         )
         self.input_agent_name = UITextInput(
             rect=(sb_x, 448, sb_w, 28),
-            text="ppo_fr_agent",
+            text="ppo[fr,self]",
             placeholder="Agent Name",
             on_change=lambda t: setattr(self, "train_agent_name", t),
         )
@@ -881,7 +881,7 @@ class OvercookedApp:
             self.dropdown_train_recipe.selected_value = matched
 
     def _start_training(self) -> None:
-        agent_name = self.train_agent_name.strip() or "ppo_fr_agent"
+        agent_name = self.train_agent_name.strip() or "ppo[fr,self]"
         self.train_last_trained_name = agent_name
         self.btn_view_trained.text = f"View {agent_name}"
 
@@ -1104,12 +1104,16 @@ class OvercookedApp:
 
                         name_from_data = data.get("agent_name")
                         if not name_from_data:
-                            if self.train_recipe == "greedy":
-                                name_from_data = "ppo_greedy"
+                            if self.train_recipe in ("ppo", "ppo_sp"):
+                                name_from_data = "ppo[fr,self]"
+                            elif self.train_recipe in ("ppo_bc", "bc"):
+                                name_from_data = "ppo[fr,bc]"
+                            elif self.train_recipe in ("greedy", "ppo_greedy"):
+                                name_from_data = "ppo[fr,greedy]"
                             elif self.train_recipe == "ppo_50_50":
-                                name_from_data = "ppo_v_greedy"
+                                name_from_data = "ppo[fr,self,greedy]"
                             else:
-                                name_from_data = getattr(self, "train_last_trained_name", "Trained_Agent")
+                                name_from_data = getattr(self, "train_last_trained_name", "ppo[fr,self]")
                         self.train_last_trained_name = name_from_data
                         if hasattr(self, "btn_view_trained"):
                             self.btn_view_trained.text = f"View {self.train_last_trained_name} Live"
