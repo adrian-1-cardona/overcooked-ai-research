@@ -3,10 +3,14 @@
     "id": "ppo_fr_self",
     "name": "ppo[fr,self]",
     "date_trained": "11/16/2026",
-    "time_trained": "06:48",
+    "time_trained": "10:10",
     "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_fr_self",
     "layout": "all_layouts",
     "recipe": "ppo_sp",
-    "reward_mean": 0.0
+    "reward_mean": 225.78,
+    "agent_1": "ppo",
+    "agent_1_pct": 100,
+    "agent_2": "ppo",
+    "agent_2_pct": 0
   }
 ]

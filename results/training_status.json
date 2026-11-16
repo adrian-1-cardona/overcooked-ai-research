@@ -1,16 +1,16 @@
 {
   "status": "training",
-  "recipe": "ppo_sp",
+  "recipe": "ppo_bc",
   "layout": "all_layouts",
-  "current_layout": "counter_circuit_o_1order",
-  "layout_index": 5,
+  "current_layout": "cramped_room",
+  "layout_index": 1,
   "total_layouts": 5,
-  "current_iter": 2820,
+  "current_iter": 15,
   "total_iters": 3250,
-  "layout_iter": 220,
+  "layout_iter": 15,
   "layout_total_iters": 650,
-  "reward_mean": 39.2,
-  "percent": 86.8,
-  "eta_seconds": 1261,
-  "layout_eta_seconds": 2523
+  "reward_mean": 24.83,
+  "percent": 0.5,
+  "eta_seconds": 4636,
+  "layout_eta_seconds": 1820
 }
