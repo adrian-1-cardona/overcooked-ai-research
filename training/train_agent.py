@@ -88,10 +88,25 @@ def update_status(data: dict[str, Any], out_dir: str | Path) -> None:
             pass
 
 
+def resolve_recipe_partner(
+    recipe: str, partner_type: str | None = None, partner_prob: float | None = None
+) -> tuple[str, float]:
+    """Resolve partner type and probability based on training recipe."""
+    if recipe in ("greedy", "ppo_greedy"):
+        return ("greedy" if partner_type is None else partner_type, 1.0 if partner_prob is None else partner_prob)
+    if recipe == "ppo_50_50":
+        return ("greedy" if partner_type is None else partner_type, 0.5 if partner_prob is None else partner_prob)
+    if recipe in ("ppo_bc", "bc"):
+        return ("bc" if partner_type is None else partner_type, 0.5 if partner_prob is None else partner_prob)
+    if recipe in ("ppo", "ppo_sp"):
+        return ("ppo" if partner_type is None else partner_type, 0.0 if partner_prob is None else partner_prob)
+    return (partner_type or "ppo", 0.5 if partner_prob is None else partner_prob)
+
+
 def build_trainer(
-    recipe: str = "ppo_greedy",
+    recipe: str = "ppo_sp",
     layout_name: str = "cramped_room",
-    partner_type: str = "greedy",
+    partner_type: str | None = None,
     partner_prob: float | None = None,
     num_workers: int = 6,
     lr: float = 2.5e-4,
@@ -104,21 +119,8 @@ def build_trainer(
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, include_dashboard=False, log_to_driver=False)
 
-    if partner_prob is None:
-        if recipe in ("greedy", "ppo_greedy"):
-            partner_type = "greedy"
-            partner_prob = 1.0
-        elif recipe == "ppo_50_50":
-            partner_type = "greedy"
-            partner_prob = 0.5
-        elif recipe in ("ppo_bc", "bc"):
-            partner_type = "bc"
-            partner_prob = 0.5
-        elif recipe in ("ppo", "ppo_sp"):
-            partner_type = "ppo"
-            partner_prob = 0.0
-        else:
-            partner_prob = 0.5
+    if partner_prob is None or partner_type is None:
+        partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
 
     # Register custom PPO model
     ModelCatalog.register_custom_model("MyPPOModel", RllibPPOModel)
@@ -332,9 +334,9 @@ def compute_multi_layout_progress(
 
 
 def train_single_layout(
-    recipe: str = "ppo_greedy",
+    recipe: str = "ppo_sp",
     layout_name: str = "cramped_room",
-    partner_type: str = "greedy",
+    partner_type: str | None = None,
     partner_prob: float | None = None,
     num_iters: int = 650,
     num_workers: int = 6,
@@ -346,6 +348,7 @@ def train_single_layout(
     shutdown_at_end: bool = True,
 ) -> Path:
     """Execute training run for a single layout."""
+    partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
     print("=" * 60)
     print(f"STARTING TRAINING PIPELINE: {recipe.upper()}")
     print(f"  Layout: {layout_name}")
@@ -574,8 +577,8 @@ def train_single_layout(
 
 
 def train_multi_layout(
-    recipe: str = "ppo_greedy",
-    partner_type: str = "greedy",
+    recipe: str = "ppo_sp",
+    partner_type: str | None = None,
     partner_prob: float | None = None,
     num_iters: int = 650,
     num_workers: int = 4,
@@ -584,6 +587,7 @@ def train_multi_layout(
     max_concurrent: int = 1,
 ) -> Path:
     """Train an agent across all 5 benchmark layouts sequentially or concurrently."""
+    partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
     save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_all_layouts"
     save_path.mkdir(parents=True, exist_ok=True)
 
@@ -789,9 +793,9 @@ def train_multi_layout(
 
 
 def train(
-    recipe: str = "ppo_greedy",
+    recipe: str = "ppo_sp",
     layout_name: str = "cramped_room",
-    partner_type: str = "greedy",
+    partner_type: str | None = None,
     partner_prob: float | None = None,
     num_iters: int = 650,
     num_workers: int = 4,
@@ -804,6 +808,7 @@ def train(
     max_concurrent: int = 1,
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
+    partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
     if layout_name in ("all", "all_layouts", "all_maps"):
         return train_multi_layout(
             recipe=recipe,
@@ -837,13 +842,13 @@ def main() -> None:
         "--recipe",
         type=str,
         choices=["ppo", "ppo_sp", "ppo_bc", "greedy", "ppo_greedy", "ppo_50_50", "custom"],
-        default="ppo_greedy",
+        default="ppo_sp",
         help="Training recipe: ppo (Standard PPO), ppo_sp (Self-Play), ppo_bc (BC human model), greedy (Greedy Specialist), ppo_50_50 (50/50 mix), or custom.",
     )
     parser.add_argument(
         "--partner-type",
         type=str,
-        default="greedy",
+        default=None,
         choices=["greedy", "bc", "ppo", "random"],
         help="Partner type for rollouts.",
     )

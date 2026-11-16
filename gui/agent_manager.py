@@ -424,16 +424,40 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
     else:
         # Check aliases for bracketed naming conventions
         norm = agent_type.lower().replace(" ", "").replace("_", "")
-        if norm in ("ppo[fr,self,greedy]", "ppo[self,greedy,fr]", "ppofrselfgreedy", "pposelfgreedyfr", "fr[self,greedy]"):
-            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'frppovgreedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        if norm in ("ppo[fr,self]", "ppofrself", "frself", "ppo[self,fr]"):
+            target = REPO_ROOT / 'models' / 'ppo_fr_self'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[fr,bc]", "ppofrbc", "frbc", "ppo[bc,fr]"):
+            target = REPO_ROOT / 'models' / 'ppo_fr_bc'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("bc", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[fr,self,greedy]", "ppo[self,greedy,fr]", "ppofrselfgreedy", "pposelfgreedyfr", "fr[self,greedy]"):
+            target = REPO_ROOT / 'models' / 'frppovgreedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
         elif norm in ("ppo[fr,greedy]", "ppofrgreedy", "fr[greedy]"):
-            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'frgreedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            target = REPO_ROOT / 'models' / 'frgreedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return _create_fallback_greedy_agent(mdp, agent_index), None
         elif norm in ("ppo[self,greedy]", "pposelfgreedy"):
-            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'ppo_v_greedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            target = REPO_ROOT / 'models' / 'ppo_v_greedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
         elif norm in ("ppo[greedy]", "ppogreedy"):
-            return create_agent(f"custom:{(REPO_ROOT / 'models' / 'ppo_greedy').resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            target = REPO_ROOT / 'models' / 'ppo_greedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return _create_fallback_greedy_agent(mdp, agent_index), None
         elif norm in ("ppo[self]", "ppoself", "ppo_sp", "pposp"):
             return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[bc]", "ppobc"):
+            return create_agent("bc", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
 
         # Check if agent_type matches any display label from get_custom_trained_agents()
         for label, val in get_custom_trained_agents():

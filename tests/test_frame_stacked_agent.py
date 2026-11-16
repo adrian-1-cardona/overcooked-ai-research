@@ -89,10 +89,13 @@ def test_reset_repeats_initial_frame_after_a_new_episode():
 
 
 def test_legacy_checkpoint_keeps_saved_single_frame_input():
+    import pytest
     from training.checkpoint_policy import load_checkpoint_policy, agent_from_policy
     from human_aware_rl.rllib.rllib import RlLibAgent
 
     checkpoint = REPO_ROOT / 'models/ppo_greedy/cramped_room/checkpoint_000650/checkpoint-650'
+    if not checkpoint.is_file():
+        pytest.skip(f"Legacy checkpoint {checkpoint} not present on disk.")
     policy = load_checkpoint_policy(checkpoint)
     try:
         assert policy.model.base_model.input_shape == (None, 5, 4, 26)
