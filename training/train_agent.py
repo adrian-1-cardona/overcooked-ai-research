@@ -110,8 +110,8 @@ def build_trainer(
     partner_prob: float | None = None,
     num_workers: int = 6,
     lr: float = 2.5e-4,
-    train_batch_size: int = 4800,
-    sgd_minibatch_size: int = 800,
+    train_batch_size: int | None = None,
+    sgd_minibatch_size: int = 2000,
     seed: int = 0,
     out_dir: str | Path | None = None,
     use_lstm: bool = True,
@@ -236,11 +236,14 @@ def build_trainer(
     }
 
     rollout_fragment_length = 400
+    if train_batch_size is None:
+        train_batch_size = max(4000, num_workers * rollout_fragment_length)
     if num_workers > 0:
         batch_multiple = num_workers * rollout_fragment_length
         if train_batch_size % batch_multiple != 0:
             import math
             train_batch_size = max(train_batch_size, math.ceil(train_batch_size / batch_multiple) * batch_multiple)
+    sgd_minibatch_size = min(sgd_minibatch_size, train_batch_size)
 
     trainer_config = {
         "env": env_name,
@@ -352,6 +355,8 @@ def train_single_layout(
     multi_layout_parent: str | Path | None = None,
     shutdown_at_end: bool = True,
     use_lstm: bool = True,
+    train_batch_size: int | None = None,
+    sgd_minibatch_size: int = 2000,
 ) -> Path:
     """Execute training run for a single layout."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -442,6 +447,8 @@ def train_single_layout(
         num_workers=num_workers,
         out_dir=save_path,
         use_lstm=use_lstm,
+        train_batch_size=train_batch_size,
+        sgd_minibatch_size=sgd_minibatch_size,
     )
 
     start_iter = 1
@@ -595,6 +602,8 @@ def train_multi_layout(
     dry_run: bool = False,
     max_concurrent: int = 1,
     use_lstm: bool = True,
+    train_batch_size: int | None = None,
+    sgd_minibatch_size: int = 2000,
 ) -> Path:
     """Train an agent across all 5 benchmark layouts sequentially or concurrently."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -681,6 +690,8 @@ def train_multi_layout(
                 "--iters", str(num_iters),
                 "--num-workers", str(num_workers),
                 *(["--use-lstm"] if use_lstm else ["--no-lstm"]),
+                *(["--sgd-minibatch-size", str(sgd_minibatch_size)] if sgd_minibatch_size else []),
+                *(["--train-batch-size", str(train_batch_size)] if train_batch_size else []),
                 "--out-dir", str(layout_out_dir),
                 "--layout-index", str(l_idx),
                 "--total-layouts", str(total_layouts),
@@ -715,6 +726,8 @@ def train_multi_layout(
                     "--iters", str(num_iters),
                     "--num-workers", str(num_workers),
                     *(["--use-lstm"] if use_lstm else ["--no-lstm"]),
+                    *(["--sgd-minibatch-size", str(sgd_minibatch_size)] if sgd_minibatch_size else []),
+                    *(["--train-batch-size", str(train_batch_size)] if train_batch_size else []),
                     "--out-dir", str(layout_out_dir),
                     "--layout-index", str(l_idx),
                     "--total-layouts", str(total_layouts),
@@ -820,6 +833,8 @@ def train(
     shutdown_at_end: bool = True,
     max_concurrent: int = 1,
     use_lstm: bool = True,
+    train_batch_size: int | None = None,
+    sgd_minibatch_size: int = 2000,
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -834,6 +849,8 @@ def train(
             dry_run=dry_run,
             max_concurrent=max_concurrent,
             use_lstm=use_lstm,
+            train_batch_size=train_batch_size,
+            sgd_minibatch_size=sgd_minibatch_size,
         )
     return train_single_layout(
         recipe=recipe,
@@ -849,6 +866,8 @@ def train(
         multi_layout_parent=multi_layout_parent,
         shutdown_at_end=shutdown_at_end,
         use_lstm=use_lstm,
+        train_batch_size=train_batch_size,
+        sgd_minibatch_size=sgd_minibatch_size,
     )
 
 
@@ -940,6 +959,18 @@ def main() -> None:
         action="store_false",
         help="Disable LSTM recurrence (use feedforward network).",
     )
+    parser.add_argument(
+        "--train-batch-size",
+        type=int,
+        default=None,
+        help="Training batch size across all workers (default: num_workers * 400).",
+    )
+    parser.add_argument(
+        "--sgd-minibatch-size",
+        type=int,
+        default=2000,
+        help="Minibatch size for SGD updates matching Carroll et al. (default: 2000).",
+    )
     args = parser.parse_args()
 
     train(
@@ -956,6 +987,8 @@ def main() -> None:
         multi_layout_parent=args.multi_layout_parent,
         max_concurrent=args.max_concurrent,
         use_lstm=args.use_lstm,
+        train_batch_size=args.train_batch_size,
+        sgd_minibatch_size=args.sgd_minibatch_size,
     )
 
 
