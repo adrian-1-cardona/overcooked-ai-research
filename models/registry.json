@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "ppo_fr_self",
+    "name": "ppo_fr_self",
+    "date_trained": "11/16/2026",
+    "time_trained": "06:48",
+    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_fr_self",
+    "layout": "all_layouts",
+    "recipe": "ppo_sp",
+    "reward_mean": 0.0
+  }
+]

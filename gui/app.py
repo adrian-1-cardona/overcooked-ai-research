@@ -197,8 +197,8 @@ class OvercookedApp:
         self.train_agent_1_pct = 50
         self.train_agent_2 = "greedy"
         self.train_agent_2_pct = 50
-        self.train_agent_name = "Jeff"
-        self.train_last_trained_name = "Jeff"
+        self.train_agent_name = "ppo_fr_agent"
+        self.train_last_trained_name = "ppo_fr_agent"
         self.train_process: subprocess.Popen[Any] | None = None
         self.train_progress_cur = 0
         self.train_progress_total = 650
@@ -700,7 +700,7 @@ class OvercookedApp:
         )
         self.input_agent_name = UITextInput(
             rect=(sb_x, 448, sb_w, 28),
-            text="Jeff",
+            text="ppo_fr_agent",
             placeholder="Agent Name",
             on_change=lambda t: setattr(self, "train_agent_name", t),
         )
@@ -752,9 +752,9 @@ class OvercookedApp:
         )
 
         # Image 2: Complete Widgets
-        self.btn_view_jeff = UIButton(
+        self.btn_view_trained = UIButton(
             rect=(sb_x, 298, sb_w, 36),
-            text="View Jeff Live",
+            text="View Agent Live",
             on_click=self._view_trained_agent_live,
             bg_color=COLOR_RUN,
             hover_color=COLOR_RUN_HOVER,
@@ -882,9 +882,9 @@ class OvercookedApp:
             self.dropdown_train_recipe.selected_value = matched
 
     def _start_training(self) -> None:
-        agent_name = self.train_agent_name.strip() or "Jeff"
+        agent_name = self.train_agent_name.strip() or "ppo_fr_agent"
         self.train_last_trained_name = agent_name
-        self.btn_view_jeff.text = f"View {agent_name}"
+        self.btn_view_trained.text = f"View {agent_name}"
 
         # Determine partner type and prob
         recipe = self.train_recipe
@@ -1112,8 +1112,8 @@ class OvercookedApp:
                             else:
                                 name_from_data = getattr(self, "train_last_trained_name", "Trained_Agent")
                         self.train_last_trained_name = name_from_data
-                        if hasattr(self, "btn_view_jeff"):
-                            self.btn_view_jeff.text = f"View {self.train_last_trained_name} Live"
+                        if hasattr(self, "btn_view_trained"):
+                            self.btn_view_trained.text = f"View {self.train_last_trained_name} Live"
 
                         eta_sec = data.get("eta_seconds", None)
                         if eta_sec is not None:
@@ -1877,7 +1877,7 @@ class OvercookedApp:
                 return
 
         elif self.train_view == "complete":
-            if self.btn_view_jeff.handle_event(event):
+            if self.btn_view_trained.handle_event(event):
                 return
             if hasattr(self, "btn_view_matrix") and self.btn_view_matrix.handle_event(event):
                 return
@@ -2471,7 +2471,7 @@ class OvercookedApp:
 
             self.window.blit(f_lbl.render("Estimated Time: 0s", True, TEXT_PRIMARY), (sb_x, 252))
 
-            self.btn_view_jeff.draw(self.window)
+            self.btn_view_trained.draw(self.window)
             if hasattr(self, "btn_view_matrix"):
                 self.btn_view_matrix.draw(self.window)
             self.btn_view_agent_db.draw(self.window)
