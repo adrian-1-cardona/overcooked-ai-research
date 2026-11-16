@@ -26,6 +26,8 @@ DEFAULT_CSV = Path("results/matrix.csv")
 
 # Standardized Publication Nomenclature
 DISPLAY_NAME_MAP = {
+    "ppo_fr_self": "ppo[fr,self]",
+    "ppo_fr_bc": "ppo[fr,bc]",
     "frppovgreedy": "ppo[fr,self,greedy]",
     "frgreedy": "ppo[fr,greedy]",
     "ppo_v_greedy": "ppo[self,greedy]",

@@ -37,7 +37,7 @@ def main() -> None:
     print(f"Layouts: {', '.join(BENCHMARK_LAYOUTS)}")
     print("Architecture: RllibLSTMPPOModel (CELL_SIZE=256) + Frame Stacking (104 ch)")
     print("Iterations per layout: 650")
-    print("Concurrency: 2 parallel layouts | Workers per layout: 4 (8 total workers)")
+    print("Concurrency: 2 parallel layouts | Workers per layout: 5 (10 workers + 2 drivers = 12 procs, ~99% CPU)")
     print("=" * 70)
 
     # 1. Train ppo_fr_self across all 5 layouts
@@ -50,7 +50,7 @@ def main() -> None:
         partner_type="ppo",
         partner_prob=0.0,
         num_iters=650,
-        num_workers=4,
+        num_workers=5,
         max_concurrent=2,
         use_lstm=True,
         out_dir=REPO_ROOT / "models" / "ppo_fr_self",
@@ -67,7 +67,7 @@ def main() -> None:
         partner_type="bc",
         partner_prob=0.5,
         num_iters=650,
-        num_workers=4,
+        num_workers=5,
         max_concurrent=2,
         use_lstm=True,
         out_dir=REPO_ROOT / "models" / "ppo_fr_bc",
