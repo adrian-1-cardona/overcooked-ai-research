@@ -64,7 +64,7 @@ from ray.rllib.models import ModelCatalog
 from ray.tune.registry import register_env
 from ray.tune.logger import UnifiedLogger
 
-from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
+from human_aware_rl.ppo.ppo_rllib import RllibLSTMPPOModel, RllibPPOModel
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
@@ -114,6 +114,7 @@ def build_trainer(
     sgd_minibatch_size: int = 800,
     seed: int = 0,
     out_dir: str | Path | None = None,
+    use_lstm: bool = True,
 ) -> tuple[PPOTrainer, dict[str, Any]]:
     """Build and configure the PPOTrainer with the requested partner recipe."""
     if not ray.is_initialized():
@@ -122,8 +123,12 @@ def build_trainer(
     if partner_prob is None or partner_type is None:
         partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
 
-    # Register custom PPO model
-    ModelCatalog.register_custom_model("MyPPOModel", RllibPPOModel)
+    # Register custom PPO model (Carroll et al. NeurIPS 2019 exact LSTM recurrent architecture)
+    custom_model_cls = RllibLSTMPPOModel if use_lstm else RllibPPOModel
+    ModelCatalog.register_custom_model("MyPPOModel", custom_model_cls)
+    ModelCatalog.register_custom_model("MyLSTMPPOModel", RllibLSTMPPOModel)
+    ModelCatalog.register_custom_model("RllibLSTMPPOModel", RllibLSTMPPOModel)
+    ModelCatalog.register_custom_model("RllibPPOModel", RllibPPOModel)
 
     env_config = {
         "layout_name": layout_name,
@@ -152,13 +157,13 @@ def build_trainer(
 
     # Probe spaces with a dummy environment
     probe_env = env_creator(env_config)
-    # RllibPPOModel derives its convolutional input shape from this stacked space.
+    # RllibPPOModel/RllibLSTMPPOModel derives its convolutional input shape from this stacked space.
     ppo_obs_space = probe_env.ppo_observation_space
     greedy_obs_space = probe_env.greedy_observation_space
     action_space = probe_env.shared_action_space
 
     custom_model_config = {
-        "use_lstm": False,
+        "use_lstm": use_lstm,
         "NUM_HIDDEN_LAYERS": 3,
         "SIZE_HIDDEN_LAYERS": 64,
         "NUM_FILTERS": 25,
@@ -346,6 +351,7 @@ def train_single_layout(
     total_layouts: int | None = None,
     multi_layout_parent: str | Path | None = None,
     shutdown_at_end: bool = True,
+    use_lstm: bool = True,
 ) -> Path:
     """Execute training run for a single layout."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -392,6 +398,7 @@ def train_single_layout(
             partner_prob=partner_prob,
             num_workers=0,
             out_dir=save_path,
+            use_lstm=use_lstm,
         )
         print(f"[Dry Run] Trainer for {layout_name} passed!")
         update_status({
@@ -434,6 +441,7 @@ def train_single_layout(
         partner_prob=partner_prob,
         num_workers=num_workers,
         out_dir=save_path,
+        use_lstm=use_lstm,
     )
 
     start_iter = 1
@@ -531,6 +539,7 @@ def train_single_layout(
         "layout_name": layout_name,
         "partner_type": partner_type,
         "partner_prob": partner_prob,
+        "use_lstm": use_lstm,
         "current_iter": num_iters,
         "total_iters": num_iters,
         "reward_mean": round(float(reward_mean), 2),
@@ -585,6 +594,7 @@ def train_multi_layout(
     out_dir: str | Path | None = None,
     dry_run: bool = False,
     max_concurrent: int = 1,
+    use_lstm: bool = True,
 ) -> Path:
     """Train an agent across all 5 benchmark layouts sequentially or concurrently."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -625,6 +635,7 @@ def train_multi_layout(
                 dry_run=True,
                 layout_index=1,
                 total_layouts=total_layouts,
+                use_lstm=use_lstm,
             )
         print("[Dry Run] Multi-layout dry run passed successfully!")
         return save_path
@@ -669,6 +680,7 @@ def train_multi_layout(
                 "--layout", target_layout,
                 "--iters", str(num_iters),
                 "--num-workers", str(num_workers),
+                *(["--use-lstm"] if use_lstm else ["--no-lstm"]),
                 "--out-dir", str(layout_out_dir),
                 "--layout-index", str(l_idx),
                 "--total-layouts", str(total_layouts),
@@ -702,6 +714,7 @@ def train_multi_layout(
                     "--layout", target_layout,
                     "--iters", str(num_iters),
                     "--num-workers", str(num_workers),
+                    *(["--use-lstm"] if use_lstm else ["--no-lstm"]),
                     "--out-dir", str(layout_out_dir),
                     "--layout-index", str(l_idx),
                     "--total-layouts", str(total_layouts),
@@ -806,6 +819,7 @@ def train(
     multi_layout_parent: str | Path | None = None,
     shutdown_at_end: bool = True,
     max_concurrent: int = 1,
+    use_lstm: bool = True,
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -819,6 +833,7 @@ def train(
             out_dir=out_dir,
             dry_run=dry_run,
             max_concurrent=max_concurrent,
+            use_lstm=use_lstm,
         )
     return train_single_layout(
         recipe=recipe,
@@ -833,6 +848,7 @@ def train(
         total_layouts=total_layouts,
         multi_layout_parent=multi_layout_parent,
         shutdown_at_end=shutdown_at_end,
+        use_lstm=use_lstm,
     )
 
 
@@ -911,6 +927,19 @@ def main() -> None:
         default=None,
         help="Parent directory for multi-layout run.",
     )
+    parser.add_argument(
+        "--use-lstm",
+        dest="use_lstm",
+        action="store_true",
+        default=True,
+        help="Use Carroll et al. LSTM recurrent network (default: True).",
+    )
+    parser.add_argument(
+        "--no-lstm",
+        dest="use_lstm",
+        action="store_false",
+        help="Disable LSTM recurrence (use feedforward network).",
+    )
     args = parser.parse_args()
 
     train(
@@ -926,6 +955,7 @@ def main() -> None:
         total_layouts=args.total_layouts,
         multi_layout_parent=args.multi_layout_parent,
         max_concurrent=args.max_concurrent,
+        use_lstm=args.use_lstm,
     )
 
 

@@ -1,8 +1,9 @@
 """Multi-Map Benchmark Training Pipeline for Overcooked-AI.
 
-Trains benchmark-aligned agents matching Carroll et al. (NeurIPS 2019) with DeepMind k=4 Frame Stacking:
-1. ppo_fr_self (PPO Self-Play baseline with Frame Stacking)
-2. ppo_fr_bc (PPO trained alongside Behavior Cloning Human Model with Frame Stacking)
+Trains benchmark-aligned agents matching Carroll et al. (NeurIPS 2019) Recurrent LSTM
+architecture with DeepMind k=4 Frame Stacking:
+1. ppo_fr_self (PPO Self-Play baseline with LSTM recurrence + Frame Stacking)
+2. ppo_fr_bc (PPO trained alongside Behavior Cloning Human Model with LSTM recurrence + Frame Stacking)
 
 Layouts:
 - cramped_room
@@ -32,15 +33,16 @@ from training.train_agent import train_multi_layout, BENCHMARK_LAYOUTS
 def main() -> None:
     start_total = time.time()
     print("=" * 70)
-    print("BENCHMARK-ALIGNED OVERCOOKED TRAINING PIPELINE (FRAME STACKING k=4)")
+    print("BENCHMARK TRAINING PIPELINE: CARROLL ET AL. (2019) LSTM + FRAME STACKING")
     print(f"Layouts: {', '.join(BENCHMARK_LAYOUTS)}")
+    print("Architecture: RllibLSTMPPOModel (CELL_SIZE=256) + Frame Stacking (104 ch)")
     print("Iterations per layout: 650")
     print("Concurrency: 2 parallel layouts | Workers per layout: 4 (8 total workers)")
     print("=" * 70)
 
     # 1. Train ppo_fr_self across all 5 layouts
     print("\n" + "#" * 70)
-    print("# [PHASE 1/2] TRAINING ppo_fr_self (PPO Self-Play) ACROSS ALL MAPS")
+    print("# [PHASE 1/2] TRAINING ppo_fr_self (PPO Self-Play + LSTM) ACROSS ALL MAPS")
     print("#" * 70 + "\n")
     t0 = time.time()
     train_multi_layout(
@@ -50,13 +52,14 @@ def main() -> None:
         num_iters=650,
         num_workers=4,
         max_concurrent=2,
+        use_lstm=True,
         out_dir=REPO_ROOT / "models" / "ppo_fr_self",
     )
     print(f"\n[PHASE 1 COMPLETE] ppo_fr_self finished in {(time.time() - t0) / 60:.1f} minutes.\n")
 
     # 2. Train ppo_fr_bc across all 5 layouts
     print("\n" + "#" * 70)
-    print("# [PHASE 2/2] TRAINING ppo_fr_bc (PPO + BC Human Model) ACROSS ALL MAPS")
+    print("# [PHASE 2/2] TRAINING ppo_fr_bc (PPO + BC Human Model + LSTM) ACROSS ALL MAPS")
     print("#" * 70 + "\n")
     t1 = time.time()
     train_multi_layout(
@@ -66,6 +69,7 @@ def main() -> None:
         num_iters=650,
         num_workers=4,
         max_concurrent=2,
+        use_lstm=True,
         out_dir=REPO_ROOT / "models" / "ppo_fr_bc",
     )
     print(f"\n[PHASE 2 COMPLETE] ppo_fr_bc finished in {(time.time() - t1) / 60:.1f} minutes.\n")
