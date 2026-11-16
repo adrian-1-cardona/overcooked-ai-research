@@ -33,7 +33,7 @@ from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action
 from gui.agent_manager import create_agent, is_ppo_supported
 
-DEFAULT_AGENTS = ["ppo_sp", "greedy", "random"]
+DEFAULT_AGENTS = ["ppo_fr_self", "ppo_fr_bc", "ppo_sp", "bc", "greedy"]
 DEFAULT_LEVELS = [
     "cramped_room",
     "asymmetric_advantages",

@@ -14,3 +14,5 @@ tmp/
 scratch/
 models/**/logs/
 *.metadata_never_index
+models/**/checkpoint_*/
+*.bak

@@ -1,16 +1,1 @@
-{
-  "status": "training",
-  "recipe": "ppo_bc",
-  "layout": "all_layouts",
-  "current_layout": "asymmetric_advantages",
-  "layout_index": 2,
-  "total_layouts": 5,
-  "current_iter": 1108,
-  "total_iters": 3250,
-  "layout_iter": 458,
-  "layout_total_iters": 650,
-  "reward_mean": 228.89,
-  "percent": 34.1,
-  "eta_seconds": 5122,
-  "layout_eta_seconds": 918
-}
+{"status": "training", "recipe": "ppo_greedy", "layout": "all_layouts", "current_layout": "asymmetric_advantages", "layout_index": 2, "total_layouts": 5, "current_iter": 150, "total_iters": 500, "reward_mean": 12.5, "percent": 30.0, "eta_seconds": 700}

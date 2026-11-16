@@ -1,0 +1,11 @@
+{
+  "recipe": "ppo_sp",
+  "layout_name": "forced_coordination",
+  "partner_type": "ppo",
+  "partner_prob": 0.0,
+  "use_lstm": true,
+  "current_iter": 650,
+  "total_iters": 650,
+  "reward_mean": 60.11,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_fr_self/forced_coordination/checkpoint_000650"
+}

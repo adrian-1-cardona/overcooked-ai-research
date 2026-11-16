@@ -1,5 +1,19 @@
 [
   {
+    "id": "ppo_fr_bc",
+    "name": "ppo[fr,bc]",
+    "date_trained": "11/16/2026",
+    "time_trained": "14:03",
+    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_fr_bc",
+    "layout": "all_layouts",
+    "recipe": "ppo_custom",
+    "reward_mean": 149.6,
+    "agent_1": "ppo",
+    "agent_1_pct": 50,
+    "agent_2": "bc",
+    "agent_2_pct": 50
+  },
+  {
     "id": "ppo_fr_self",
     "name": "ppo[fr,self]",
     "date_trained": "11/16/2026",
@@ -12,15 +26,5 @@
     "agent_1_pct": 100,
     "agent_2": "ppo",
     "agent_2_pct": 0
-  },
-  {
-    "id": "ppo_fr_bc",
-    "name": "ppo_fr_bc",
-    "date_trained": "11/16/2026",
-    "time_trained": "11:07",
-    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_fr_bc",
-    "layout": "cramped_room",
-    "recipe": "ppo_custom",
-    "reward_mean": 0.0
   }
 ]
