@@ -5,12 +5,12 @@
   "current_layout": "coordination_ring",
   "layout_index": 3,
   "total_layouts": 5,
-  "current_iter": 1624,
+  "current_iter": 1882,
   "total_iters": 3250,
-  "layout_iter": 324,
+  "layout_iter": 582,
   "layout_total_iters": 650,
-  "reward_mean": 280.97,
-  "percent": 50.0,
-  "eta_seconds": 4055,
-  "layout_eta_seconds": 1626
+  "reward_mean": 148.39,
+  "percent": 57.9,
+  "eta_seconds": 3078,
+  "layout_eta_seconds": 306
 }

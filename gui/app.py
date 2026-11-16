@@ -238,11 +238,10 @@ class OvercookedApp:
         self.matrix_streamlit_proc: subprocess.Popen[Any] | None = None
         self.matrix_thread: threading.Thread | None = None
         self.matrix_agents = {
-            "frppovgreedy": True,
-            "frgreedy": True,
-            "ppo_v_greedy": True,
-            "ppo_greedy": True,
+            "ppo_fr_self": True,
+            "ppo_fr_bc": True,
             "ppo_sp": True,
+            "bc": True,
             "greedy": True,
             "random": False,
         }

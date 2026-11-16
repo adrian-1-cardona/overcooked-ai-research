@@ -81,27 +81,33 @@ preset = st.sidebar.selectbox(
     "Quick Preset",
     options=[
         "Custom Selection",
-        "Full Matrix (All 6 Agents)",
-        "FrameStack Focus (ppo[fr,...] vs baseline & greedy)",
-        "Curriculum Comparison (ppo[fr,self,greedy] vs ppo[self,greedy])",
+        "Full Matrix (All Agents)",
+        "FrameStack Focus (ppo[fr,self] vs ppo[self])",
+        "Benchmark Comparison (ppo[fr,self] vs ppo[self] & bc)",
         "Partner Test with greedy",
     ],
     index=0,
 )
 
 # Presets mapping
-if preset == "Full Matrix (All 6 Agents)":
+if preset == "Full Matrix (All Agents)":
     default_rows = all_display_agents
     default_cols = all_display_agents
-elif preset == "FrameStack Focus (ppo[fr,...] vs baseline & greedy)":
-    default_rows = [get_display_name("frppovgreedy"), get_display_name("frgreedy")]
-    default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "ppo_v_greedy", "frppovgreedy"]]
-elif preset == "Curriculum Comparison (ppo[fr,self,greedy] vs ppo[self,greedy])":
-    default_rows = [get_display_name("frppovgreedy"), get_display_name("ppo_v_greedy")]
-    default_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "frppovgreedy", "ppo_v_greedy"]]
+elif preset == "FrameStack Focus (ppo[fr,self] vs ppo[self])":
+    candidate_rows = [get_display_name("ppo_fr_self"), get_display_name("ppo_fr_bc")]
+    default_rows = [a for a in candidate_rows if a in all_display_agents] or all_display_agents
+    candidate_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "bc", "ppo_fr_self"]]
+    default_cols = [a for a in candidate_cols if a in all_display_agents] or all_display_agents
+elif preset == "Benchmark Comparison (ppo[fr,self] vs ppo[self] & bc)":
+    candidate_rows = [get_display_name("ppo_fr_self"), get_display_name("ppo_sp")]
+    default_rows = [a for a in candidate_rows if a in all_display_agents] or all_display_agents
+    candidate_cols = [get_display_name(a) for a in ["greedy", "ppo_sp", "bc", "ppo_fr_self"]]
+    default_cols = [a for a in candidate_cols if a in all_display_agents] or all_display_agents
 elif preset == "Partner Test with greedy":
-    default_rows = [get_display_name(a) for a in ["frppovgreedy", "ppo_v_greedy", "ppo_sp", "greedy"]]
-    default_cols = [get_display_name("greedy"), get_display_name("ppo_sp")]
+    candidate_rows = [get_display_name(a) for a in ["ppo_fr_self", "ppo_fr_bc", "ppo_sp", "greedy"]]
+    default_rows = [a for a in candidate_rows if a in all_display_agents] or all_display_agents
+    candidate_cols = [get_display_name("greedy"), get_display_name("ppo_sp")]
+    default_cols = [a for a in candidate_cols if a in all_display_agents] or all_display_agents
 else:
     default_rows = all_display_agents
     default_cols = all_display_agents
@@ -241,19 +247,31 @@ with tabs[0]:
 
 # 2. Side-by-Side Comparison Tab: ppo[fr,...] vs Baseline
 with tabs[1]:
-    st.subheader("Direct Comparison: ppo[fr,self,greedy] vs ppo[self,greedy]")
-    st.markdown(
-        "Directly isolates **`ppo[fr,self,greedy]`** against the baseline **`ppo[self,greedy]`** "
-        "paired with foreign partners across the selected levels."
+    # Determine the primary frame-stack model and baseline model present in data
+    pref_fs = get_display_name("ppo_fr_self")
+    pref_base = get_display_name("ppo_sp")
+    
+    fs_key = pref_fs if pref_fs in all_display_agents else (
+        get_display_name("frppovgreedy") if get_display_name("frppovgreedy") in all_display_agents else all_display_agents[0]
+    )
+    base_key = pref_base if pref_base in all_display_agents else (
+        get_display_name("ppo_v_greedy") if get_display_name("ppo_v_greedy") in all_display_agents else (
+            all_display_agents[1] if len(all_display_agents) > 1 else all_display_agents[0]
+        )
     )
 
-    fs_key = get_display_name("frppovgreedy")
-    base_key = get_display_name("ppo_v_greedy")
+    st.subheader(f"Direct Comparison: {fs_key} vs {base_key}")
+    st.markdown(
+        f"Directly isolates **`{fs_key}`** against the baseline **`{base_key}`** "
+        "paired with foreign partners across the selected levels."
+    )
 
     comp_df = raw_df[raw_df["level"].isin(selected_levels)].copy()
 
     # Compare when playing with Greedy and PPO[self]
-    partner_keys = [get_display_name(p) for p in ["greedy", "ppo_sp"]]
+    partner_keys = [p for p in [get_display_name("greedy"), get_display_name("ppo_sp"), get_display_name("bc")] if p in all_display_agents]
+    if not partner_keys:
+        partner_keys = [a for a in all_display_agents if a != fs_key][:2]
 
     col_fs, col_base, col_delta = st.columns(3)
 

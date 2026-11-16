@@ -63,14 +63,14 @@ class TestTrainModeAndDB(unittest.TestCase):
         self.app = OvercookedApp(initial_layout="cramped_room", horizon=50, fps=30)
 
     def tearDown(self):
-        for p in MODELS_DIR.glob("TestJeff*"):
+        for p in MODELS_DIR.glob("Test*"):
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
         if REGISTRY_FILE.is_file():
             try:
                 with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
                     recs = json.load(f)
-                recs = [r for r in recs if not r.get("name", "").startswith("TestJeff")]
+                recs = [r for r in recs if not r.get("name", "").startswith("Test")]
                 with open(REGISTRY_FILE, "w", encoding="utf-8") as f:
                     json.dump(recs, f, indent=2)
             except Exception:
@@ -78,12 +78,12 @@ class TestTrainModeAndDB(unittest.TestCase):
 
     def test_agent_database_crud(self):
         # 1. Add agent
-        test_dir = MODELS_DIR / "TestJeff_001"
+        test_dir = MODELS_DIR / "Test_Agent_001"
         test_dir.mkdir(parents=True, exist_ok=True)
         (test_dir / "config.pkl").write_text("dummy")
 
         rec = AgentDatabase.add_agent(
-            name="TestJeff",
+            name="Test_Agent",
             layout="cramped_room",
             checkpoint_path=test_dir,
             agent_1="ppo",
