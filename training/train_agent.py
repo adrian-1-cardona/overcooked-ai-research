@@ -111,7 +111,7 @@ def build_trainer(
     num_workers: int = 6,
     lr: float = 2.5e-4,
     train_batch_size: int | None = None,
-    sgd_minibatch_size: int = 2000,
+    sgd_minibatch_size: int = 4000,
     seed: int = 0,
     out_dir: str | Path | None = None,
     use_lstm: bool = True,
@@ -356,7 +356,7 @@ def train_single_layout(
     shutdown_at_end: bool = True,
     use_lstm: bool = True,
     train_batch_size: int | None = None,
-    sgd_minibatch_size: int = 2000,
+    sgd_minibatch_size: int = 4000,
 ) -> Path:
     """Execute training run for a single layout."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -603,7 +603,7 @@ def train_multi_layout(
     max_concurrent: int = 1,
     use_lstm: bool = True,
     train_batch_size: int | None = None,
-    sgd_minibatch_size: int = 2000,
+    sgd_minibatch_size: int = 4000,
 ) -> Path:
     """Train an agent across all 5 benchmark layouts sequentially or concurrently."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -834,7 +834,7 @@ def train(
     max_concurrent: int = 1,
     use_lstm: bool = True,
     train_batch_size: int | None = None,
-    sgd_minibatch_size: int = 2000,
+    sgd_minibatch_size: int = 4000,
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -968,8 +968,8 @@ def main() -> None:
     parser.add_argument(
         "--sgd-minibatch-size",
         type=int,
-        default=2000,
-        help="Minibatch size for SGD updates matching Carroll et al. (default: 2000).",
+        default=4000,
+        help="Minibatch size for SGD updates (default: 4000).",
     )
     args = parser.parse_args()
 

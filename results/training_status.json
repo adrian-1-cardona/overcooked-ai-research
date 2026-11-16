@@ -1,11 +1,16 @@
 {
-  "status": "completed",
-  "recipe": "ppo_greedy",
-  "layout": "cramped_room",
-  "current_iter": 1,
-  "total_iters": 1,
-  "reward_mean": 9.75,
-  "percent": 100.0,
-  "eta_seconds": 0,
-  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/TestJeff_Bot/checkpoint_000001"
+  "status": "training",
+  "recipe": "ppo_sp",
+  "layout": "all_layouts",
+  "current_layout": "coordination_ring",
+  "layout_index": 3,
+  "total_layouts": 5,
+  "current_iter": 1506,
+  "total_iters": 3250,
+  "layout_iter": 206,
+  "layout_total_iters": 650,
+  "reward_mean": 196.25,
+  "percent": 46.3,
+  "eta_seconds": 3668,
+  "layout_eta_seconds": 1867
 }
