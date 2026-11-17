@@ -31,40 +31,8 @@ Requires Python 3.10 (`>=3.10,<3.11`). For proposal details and methodology, see
 # Interactive GUI (Human Play / Watch Mode / Live Matrix):
 python runover.py
 
-# Optional GUI overrides:
-python runover.py --layout asymmetric_advantages --agent-0 human --agent-1 ppo --horizon 400
 
-# Interactive Streamlit Coordination Matrix Dashboard:
-streamlit run dashboard/coordination_matrix.py
 
-# Automated Cross-Play Evaluation Benchmark:
-python evaluation/eval_matrix.py
-
-# Benchmark-Aligned PPO Training (Self-Play & BC Human Model, Frame Stacking k=4):
-python -m training.train_benchmark_models
-
-# Single-Layout Custom Training (e.g. Cramped Room Self-Play):
-python -m training.train_agent --recipe ppo_sp --layout cramped_room --iters 650 --num-workers 4
-
-# Pretrained Policy Comparison & Human Coordination Rollouts:
-python overcooked-agent-eval/experiments/run_pretrained_policy_comparison.py
-python overcooked-agent-eval/experiments/run_human_model_coordination.py
-
-# Full Regression Test Suite (5 Stages):
-./run_tests.sh
-```
-
-### Outputs & Run Artifacts
-
-Checkpoints, evaluation logs, and telemetry are written to `models/` and `results/`:
-- `models/<model_name>/<layout>/` — layout-specialized PPO checkpoints (`checkpoint_000650/`, `metadata.json`)
-- `models/registry.json` — persistent catalog of active trained models, recipes, and reward statistics
-- `results/matrix.csv` — full cross-play evaluation matrix scores and standard errors
-- `results/training_live.log` — real-time stdout/stderr stream from active training runs
-- `results/training_status.json` — live progress tracker (current layout, iteration, reward mean, ETA)
-- `results/last_render_run.csv` — step-by-step telemetry from the most recent interactive session
-
----
 
 ## Structure
 
@@ -118,12 +86,5 @@ For research background and foundational literature, see:
 - **Mnih et al. (Nature 2015)**: *"Human-level control through deep reinforcement learning"* — Established four-frame observation histories ($k=4$) for temporal velocity and acceleration representation in feed-forward networks. [Nature 518, 529–533](https://www.nature.com/articles/nature14236)
 - **Canaan et al.**: Cooperative Game AI, partner modeling, and quality-diversity search in multi-agent environments.
 
----
-
-## Contact
-
-**Adrian Cardona** ([adcardon@calpoly.edu](mailto:adcardon@calpoly.edu))  
-Department of Computer Science & Software Engineering  
-California Polytechnic State University, San Luis Obispo  
 
 **Advisor:** Prof. Rodrigo Canaan ([rcanaan@calpoly.edu](mailto:rcanaan@calpoly.edu))
