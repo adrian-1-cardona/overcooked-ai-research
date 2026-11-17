@@ -30,7 +30,7 @@ Requires Python 3.10 (`>=3.10,<3.11`). For proposal details and methodology, see
 ```bash
 # Interactive GUI (Human Play / Watch Mode / Live Matrix):
 python runover.py
-
+```
 
 
 
