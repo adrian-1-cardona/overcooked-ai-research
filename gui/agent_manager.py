@@ -281,7 +281,35 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
     elif agent_type_lower in ("stay", "stay agent", "idle"):
         agent = StayAgent()
 
-    elif agent_type_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning"):
+    elif agent_type_lower in ("ppo_bc", "ppo_bc_pretrain", "ppo[bc]"):
+        if is_ppo_supported(layout_name):
+            try:
+                with suppress_c_stderr():
+                    from experiments.run_pretrained_policy_comparison import bundled_checkpoint, load_trainer
+                    from human_aware_rl.rllib.rllib import get_agent_from_trainer
+                    bc_key = f"bc_{layout_name}"
+                    if bc_key not in _TRAINER_CACHE:
+                        checkpoint_path = bundled_checkpoint(layout_name, "BC")
+                        trainer = load_trainer(checkpoint_path)
+                        _TRAINER_CACHE[bc_key] = trainer
+                    trainer = _TRAINER_CACHE[bc_key]
+                    agent = get_agent_from_trainer(trainer, policy_id="ppo", agent_index=agent_index)
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                    agent.reset()
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                return agent, None
+            except Exception as e:
+                warning = f"PPO_BC load failed: {e}; using Greedy Chef."
+                agent = _create_fallback_greedy_agent(mdp, agent_index)
+                return agent, warning
+        else:
+            warning = f"PPO_BC is not bundled for '{layout_name}'; using Greedy Chef."
+            agent = _create_fallback_greedy_agent(mdp, agent_index)
+            return agent, warning
+
+    elif agent_type_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning", "h_proxy"):
         if is_ppo_supported(layout_name):
             try:
                 with suppress_c_stderr():
@@ -454,10 +482,15 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             if target.is_dir():
                 return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
             return _create_fallback_greedy_agent(mdp, agent_index), None
-        elif norm in ("ppo[self]", "ppoself", "ppo_sp", "pposp"):
+        elif norm in ("ppo[new,self]", "pponewself", "pponew", "ppo_new", "ppo_new_self"):
+            target = REPO_ROOT / 'models' / 'ppo_new_self'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
             return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
-        elif norm in ("ppo[bc]", "ppobc"):
-            return create_agent("bc", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[self]", "ppoself", "ppo_sp", "pposp", "ppo_pretrain"):
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[bc]", "ppobc", "ppo_bc", "ppo_bc_pretrain"):
+            return create_agent("ppo_bc", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
 
         # Check if agent_type matches any display label from get_custom_trained_agents()
         for label, val in get_custom_trained_agents():

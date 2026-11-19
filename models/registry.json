@@ -14,16 +14,6 @@
     "agent_2_pct": 0
   },
   {
-    "id": "Test_Benchmark_PPO",
-    "name": "Test_Benchmark_PPO",
-    "date_trained": "11/18/2026",
-    "time_trained": "20:18",
-    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/Test_Benchmark_PPO",
-    "layout": "cramped_room",
-    "recipe": "ppo_custom",
-    "reward_mean": 0.0
-  },
-  {
     "id": "ppo_fr_bc",
     "name": "ppo[fr,bc]",
     "date_trained": "11/16/2026",
