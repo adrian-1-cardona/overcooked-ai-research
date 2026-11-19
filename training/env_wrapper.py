@@ -82,8 +82,15 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
         )
 
     def _setup_observation_space(self, agents: list[str]) -> None:
-        super()._setup_observation_space(agents)
-        single_frame_space = self.ppo_observation_space
+        if hasattr(self, "observation_space") and self.observation_space is not None:
+            return
+
+        dummy_state = self.base_env.mdp.get_standard_start_state()
+        obs_shape = self.base_env.lossless_state_encoding_mdp(dummy_state)[0].shape
+        high = np.ones(obs_shape, dtype=np.float32) * float("inf")
+        low = np.zeros(obs_shape, dtype=np.float32)
+        single_frame_space = gymnasium.spaces.Box(low, high, dtype=np.float32)
+
         k = getattr(self, "frame_stack", FRAME_STACK_SIZE)
         if k > 1:
             self.ppo_observation_space = gymnasium.spaces.Box(
@@ -93,6 +100,22 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
             )
         else:
             self.ppo_observation_space = single_frame_space
+
+        # BC observation space only computed if BC partner is actually involved
+        if self.partner_type == "bc" or any(a.startswith("bc") for a in agents):
+            try:
+                bc_obs_shape = self.base_env.featurize_state_mdp(dummy_state)[0].shape
+            except Exception:
+                bc_obs_shape = (64,)
+        else:
+            bc_obs_shape = (64,)
+
+        self.bc_observation_space = gymnasium.spaces.Box(
+            low=np.ones(bc_obs_shape, dtype=np.float32) * -100.0,
+            high=np.ones(bc_obs_shape, dtype=np.float32) * 100.0,
+            dtype=np.float32,
+        )
+
         self.greedy_observation_space = gymnasium.spaces.Box(
             low=-1.0, high=1.0, shape=(1,), dtype=np.float32
         )
@@ -110,7 +133,8 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
         self.observation_space = gymnasium.spaces.Dict(ob_space)
 
     def _setup_action_space(self, agents: list[str]) -> None:
-        super()._setup_action_space(agents)
+        if hasattr(self, "action_space") and self.action_space is not None:
+            return
         all_possible_agents = [
             "ppo_0", "ppo_1", "greedy_0", "greedy_1", "bc_0", "bc_1", "random_0", "random_1"
         ]
@@ -198,3 +222,42 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
                 obs[agent_id] = np.concatenate(frames, axis=-1)
         self._update_worker_context()
         return obs, rewards, dones, infos
+
+
+def create_padded_multi_layout_env(
+    layout_names: list[str] | None = None,
+    horizon: int = 400,
+    partner_type: str = "ppo",
+    partner_prob: float = 0.0,
+    frame_stack: int = FRAME_STACK_SIZE,
+    reward_shaping_factor: float = 1.0,
+    reward_shaping_horizon: float = 5000000,
+) -> OvercookedPartnerMultiAgent:
+    """Create an OvercookedPartnerMultiAgent environment that samples a padded 9x5 layout on reset."""
+    import random
+    from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
+    from training.padded_layouts import get_padded_mdp, PADDED_LAYOUT_GRIDS
+
+    if layout_names is None:
+        layout_names = list(PADDED_LAYOUT_GRIDS.keys())
+
+    padded_mdps = [get_padded_mdp(name) for name in layout_names]
+
+    def mdp_gen(_info: Any = None) -> Any:
+        return random.choice(padded_mdps)
+
+    base_env = OvercookedEnv(
+        mdp_generator_fn=mdp_gen,
+        horizon=horizon,
+        num_mdp=len(padded_mdps),
+    )
+    return OvercookedPartnerMultiAgent(
+        base_env=base_env,
+        reward_shaping_factor=reward_shaping_factor,
+        reward_shaping_horizon=reward_shaping_horizon,
+        use_phi=False,
+        partner_type=partner_type,
+        partner_prob=partner_prob,
+        frame_stack=frame_stack,
+    )
+

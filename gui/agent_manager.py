@@ -385,7 +385,7 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 if direct_ckpts:
                     active_model_dir = model_path
                     layout = meta.get("layout_name", layout_name)
-                    if layout not in ("all_layouts", "all_maps", layout_name):
+                    if layout not in ("all_layouts", "all_maps", "all_layouts_padded", "all_padded", "padded_all", layout_name):
                         try:
                             trained_shape = OvercookedGridworld.from_layout_name(layout).shape
                             current_shape = mdp.shape

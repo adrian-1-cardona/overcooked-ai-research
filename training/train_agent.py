@@ -131,6 +131,10 @@ def build_trainer(
     ModelCatalog.register_custom_model("RllibLSTMPPOModel", RllibLSTMPPOModel)
     ModelCatalog.register_custom_model("RllibPPOModel", RllibPPOModel)
 
+    if layout_name in ("all_layouts_padded", "all_padded", "padded_all"):
+        from training.padded_layouts import precompute_planners
+        precompute_planners()
+
     env_config = {
         "layout_name": layout_name,
         "partner_type": partner_type,
@@ -144,6 +148,14 @@ def build_trainer(
         prob = cfg.get("partner_prob", partner_prob)
         ptype = cfg.get("partner_type", partner_type)
         k = cfg.get("frame_stack", frame_stack)
+        if layout in ("all_layouts_padded", "all_padded", "padded_all"):
+            from training.env_wrapper import create_padded_multi_layout_env
+            return create_padded_multi_layout_env(
+                horizon=cfg.get("horizon", 400),
+                partner_type=ptype,
+                partner_prob=prob,
+                frame_stack=k,
+            )
         mdp = OvercookedGridworld.from_layout_name(layout)
         base_env = OvercookedEnv.from_mdp(mdp, horizon=cfg.get("horizon", 400))
         return OvercookedPartnerMultiAgent(
@@ -385,7 +397,10 @@ def train_single_layout(
             prefix = "ppo_new_self"
         elif frame_stack > 1 and recipe in ("ppo", "ppo_sp"):
             prefix = "ppo_fr_self"
-        save_path = REPO_ROOT / "models" / f"{prefix}_{layout_name}"
+        if layout_name in ("all_layouts_padded", "all_padded", "padded_all"):
+            save_path = REPO_ROOT / "models" / f"{prefix}_padded_all"
+        else:
+            save_path = REPO_ROOT / "models" / f"{prefix}_{layout_name}"
     save_path.mkdir(parents=True, exist_ok=True)
     status_dir = Path(multi_layout_parent) if multi_layout_parent else save_path
 
@@ -868,6 +883,22 @@ def train(
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
+    if layout_name in ("all_layouts_padded", "all_padded", "padded_all"):
+        return train_single_layout(
+            recipe=recipe,
+            layout_name="all_layouts_padded",
+            partner_type=partner_type,
+            partner_prob=partner_prob,
+            num_iters=num_iters,
+            num_workers=num_workers,
+            out_dir=out_dir,
+            dry_run=dry_run,
+            shutdown_at_end=shutdown_at_end,
+            use_lstm=use_lstm,
+            train_batch_size=train_batch_size,
+            sgd_minibatch_size=sgd_minibatch_size,
+            frame_stack=frame_stack,
+        )
     if layout_name in ("all", "all_layouts", "all_maps"):
         return train_multi_layout(
             recipe=recipe,
@@ -1014,13 +1045,19 @@ def main() -> None:
         action="store_true",
         help="Shorthand for --frame-stack 1 (train vanilla single-frame PPO baseline).",
     )
+    parser.add_argument(
+        "--all-padded",
+        action="store_true",
+        help="Train a single universal network across all 5 benchmark layouts padded to 9x5 (sampling random layout on reset).",
+    )
     args = parser.parse_args()
 
     frame_stack = 1 if args.vanilla else args.frame_stack
+    layout_name = "all_layouts_padded" if args.all_padded else args.layout
 
     train(
         recipe=args.recipe,
-        layout_name=args.layout,
+        layout_name=layout_name,
         partner_type=args.partner_type,
         partner_prob=args.partner_prob,
         num_iters=args.iters,
