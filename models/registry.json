@@ -1,5 +1,19 @@
 [
   {
+    "id": "ppo_padded_all",
+    "name": "ppo_padded_all",
+    "date_trained": "11/19/2026",
+    "time_trained": "09:47",
+    "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_padded_all",
+    "layout": "all_layouts_padded",
+    "recipe": "ppo_sp",
+    "reward_mean": 156.2,
+    "agent_1": "ppo",
+    "agent_1_pct": 100,
+    "agent_2": "ppo",
+    "agent_2_pct": 0
+  },
+  {
     "id": "ppo_new_self",
     "name": "ppo_new_self",
     "date_trained": "11/19/2026",

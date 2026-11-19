@@ -487,6 +487,11 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             if target.is_dir():
                 return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
             return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[padded,all]", "ppopaddedall", "ppopadded", "ppo_padded", "ppo_padded_all", "padded_all"):
+            target = REPO_ROOT / 'models' / 'ppo_padded_all'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
         elif norm in ("ppo[self]", "ppoself", "ppo_sp", "pposp", "ppo_pretrain"):
             return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
         elif norm in ("ppo[bc]", "ppobc", "ppo_bc", "ppo_bc_pretrain"):
