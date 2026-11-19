@@ -243,5 +243,27 @@ def test_partner_multiagent():
     print("OvercookedPartnerMultiAgent test passed!")
 
 
+def test_vanilla_single_frame_space_and_reset():
+    """Verify OvercookedPartnerMultiAgent with frame_stack=1 produces 26 channels (vanilla)."""
+    mdp = OvercookedGridworld.from_layout_name("cramped_room")
+    env = OvercookedPartnerMultiAgent(
+        base_env=OvercookedEnv.from_mdp(mdp, horizon=20),
+        partner_type="ppo",
+        partner_prob=0.0,
+        use_phi=False,
+        frame_stack=1,
+    )
+    obs = env.reset()
+    assert env.ppo_observation_space.shape[-1] == 26
+    for agent_id, ob in obs.items():
+        if agent_id.startswith("ppo"):
+            assert ob.shape[-1] == 26
+            assert env.ppo_observation_space.contains(ob)
+    next_obs, _, _, _ = env.step({a: Action.ACTION_TO_INDEX[Direction.NORTH] for a in env.curr_agents})
+    for agent_id, ob in next_obs.items():
+        if agent_id.startswith("ppo"):
+            assert ob.shape[-1] == 26
+
+
 if __name__ == "__main__":
     test_partner_multiagent()

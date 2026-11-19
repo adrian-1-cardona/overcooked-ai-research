@@ -115,6 +115,7 @@ def build_trainer(
     seed: int = 0,
     out_dir: str | Path | None = None,
     use_lstm: bool = True,
+    frame_stack: int = 4,
 ) -> tuple[PPOTrainer, dict[str, Any]]:
     """Build and configure the PPOTrainer with the requested partner recipe."""
     if not ray.is_initialized():
@@ -135,12 +136,14 @@ def build_trainer(
         "partner_type": partner_type,
         "partner_prob": partner_prob,
         "horizon": 400,
+        "frame_stack": frame_stack,
     }
 
     def env_creator(cfg: dict[str, Any]) -> OvercookedPartnerMultiAgent:
         layout = cfg.get("layout_name", layout_name)
         prob = cfg.get("partner_prob", partner_prob)
         ptype = cfg.get("partner_type", partner_type)
+        k = cfg.get("frame_stack", frame_stack)
         mdp = OvercookedGridworld.from_layout_name(layout)
         base_env = OvercookedEnv.from_mdp(mdp, horizon=cfg.get("horizon", 400))
         return OvercookedPartnerMultiAgent(
@@ -150,9 +153,10 @@ def build_trainer(
             use_phi=False,
             partner_type=ptype,
             partner_prob=prob,
+            frame_stack=k,
         )
 
-    env_name = f"OvercookedPartnerEnv_{recipe}_{partner_type}_{int(partner_prob*100)}_{layout_name}"
+    env_name = f"OvercookedPartnerEnv_{recipe}_{partner_type}_{int(partner_prob*100)}_{layout_name}_fs{frame_stack}"
     register_env(env_name, env_creator)
 
     # Probe spaces with a dummy environment
@@ -357,6 +361,7 @@ def train_single_layout(
     use_lstm: bool = True,
     train_batch_size: int | None = None,
     sgd_minibatch_size: int = 4000,
+    frame_stack: int = 4,
 ) -> Path:
     """Execute training run for a single layout."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -365,13 +370,22 @@ def train_single_layout(
     print(f"  Layout: {layout_name}")
     print(f"  Partner Type: {partner_type}")
     print(f"  Partner Prob: {partner_prob}")
+    print(f"  Frame Stack: {frame_stack} ({'Vanilla k=1' if frame_stack == 1 else f'Stacked k={frame_stack}'})")
     print(f"  Iterations: {num_iters}")
     print(f"  Workers: {num_workers}")
     if layout_index and total_layouts:
         print(f"  Multi-Layout Mode: Step {layout_index}/{total_layouts}")
     print("=" * 60)
 
-    save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_{layout_name}"
+    if out_dir:
+        save_path = Path(out_dir)
+    else:
+        prefix = f"{recipe}"
+        if frame_stack == 1 and recipe in ("ppo", "ppo_sp"):
+            prefix = "ppo_new_self"
+        elif frame_stack > 1 and recipe in ("ppo", "ppo_sp"):
+            prefix = "ppo_fr_self"
+        save_path = REPO_ROOT / "models" / f"{prefix}_{layout_name}"
     save_path.mkdir(parents=True, exist_ok=True)
     status_dir = Path(multi_layout_parent) if multi_layout_parent else save_path
 
@@ -404,6 +418,7 @@ def train_single_layout(
             num_workers=0,
             out_dir=save_path,
             use_lstm=use_lstm,
+            frame_stack=frame_stack,
         )
         print(f"[Dry Run] Trainer for {layout_name} passed!")
         update_status({
@@ -449,6 +464,7 @@ def train_single_layout(
         use_lstm=use_lstm,
         train_batch_size=train_batch_size,
         sgd_minibatch_size=sgd_minibatch_size,
+        frame_stack=frame_stack,
     )
 
     start_iter = 1
@@ -547,6 +563,7 @@ def train_single_layout(
         "partner_type": partner_type,
         "partner_prob": partner_prob,
         "use_lstm": use_lstm,
+        "frame_stack": frame_stack,
         "current_iter": num_iters,
         "total_iters": num_iters,
         "reward_mean": round(float(reward_mean), 2),
@@ -604,10 +621,19 @@ def train_multi_layout(
     use_lstm: bool = True,
     train_batch_size: int | None = None,
     sgd_minibatch_size: int = 4000,
+    frame_stack: int = 4,
 ) -> Path:
     """Train an agent across all 5 benchmark layouts sequentially or concurrently."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
-    save_path = Path(out_dir) if out_dir else REPO_ROOT / "models" / f"{recipe}_all_layouts"
+    if out_dir:
+        save_path = Path(out_dir)
+    else:
+        if frame_stack == 1 and recipe in ("ppo", "ppo_sp"):
+            save_path = REPO_ROOT / "models" / "ppo_new_self"
+        elif frame_stack > 1 and recipe in ("ppo", "ppo_sp"):
+            save_path = REPO_ROOT / "models" / "ppo_fr_self"
+        else:
+            save_path = REPO_ROOT / "models" / f"{recipe}_all_layouts"
     save_path.mkdir(parents=True, exist_ok=True)
 
     layouts = BENCHMARK_LAYOUTS
@@ -645,6 +671,7 @@ def train_multi_layout(
                 layout_index=1,
                 total_layouts=total_layouts,
                 use_lstm=use_lstm,
+                frame_stack=frame_stack,
             )
         print("[Dry Run] Multi-layout dry run passed successfully!")
         return save_path
@@ -689,6 +716,7 @@ def train_multi_layout(
                 "--layout", target_layout,
                 "--iters", str(num_iters),
                 "--num-workers", str(num_workers),
+                "--frame-stack", str(frame_stack),
                 *(["--use-lstm"] if use_lstm else ["--no-lstm"]),
                 *(["--sgd-minibatch-size", str(sgd_minibatch_size)] if sgd_minibatch_size else []),
                 *(["--train-batch-size", str(train_batch_size)] if train_batch_size else []),
@@ -725,6 +753,7 @@ def train_multi_layout(
                     "--layout", target_layout,
                     "--iters", str(num_iters),
                     "--num-workers", str(num_workers),
+                    "--frame-stack", str(frame_stack),
                     *(["--use-lstm"] if use_lstm else ["--no-lstm"]),
                     *(["--sgd-minibatch-size", str(sgd_minibatch_size)] if sgd_minibatch_size else []),
                     *(["--train-batch-size", str(train_batch_size)] if train_batch_size else []),
@@ -835,6 +864,7 @@ def train(
     use_lstm: bool = True,
     train_batch_size: int | None = None,
     sgd_minibatch_size: int = 4000,
+    frame_stack: int = 4,
 ) -> Path:
     """Execute training run supporting single-layout or all-maps training."""
     partner_type, partner_prob = resolve_recipe_partner(recipe, partner_type, partner_prob)
@@ -851,6 +881,7 @@ def train(
             use_lstm=use_lstm,
             train_batch_size=train_batch_size,
             sgd_minibatch_size=sgd_minibatch_size,
+            frame_stack=frame_stack,
         )
     return train_single_layout(
         recipe=recipe,
@@ -868,6 +899,7 @@ def train(
         use_lstm=use_lstm,
         train_batch_size=train_batch_size,
         sgd_minibatch_size=sgd_minibatch_size,
+        frame_stack=frame_stack,
     )
 
 
@@ -971,7 +1003,20 @@ def main() -> None:
         default=4000,
         help="Minibatch size for SGD updates (default: 4000).",
     )
+    parser.add_argument(
+        "--frame-stack",
+        type=int,
+        default=4,
+        help="Number of stacked observation frames (default: 4 for PPO_fr, set to 1 for vanilla PPO_new).",
+    )
+    parser.add_argument(
+        "--vanilla",
+        action="store_true",
+        help="Shorthand for --frame-stack 1 (train vanilla single-frame PPO baseline).",
+    )
     args = parser.parse_args()
+
+    frame_stack = 1 if args.vanilla else args.frame_stack
 
     train(
         recipe=args.recipe,
@@ -989,6 +1034,7 @@ def main() -> None:
         use_lstm=args.use_lstm,
         train_batch_size=args.train_batch_size,
         sgd_minibatch_size=args.sgd_minibatch_size,
+        frame_stack=frame_stack,
     )
 
 

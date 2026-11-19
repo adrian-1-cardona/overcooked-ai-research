@@ -65,9 +65,11 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
         use_phi: bool = True,
         partner_type: str = "greedy",
         partner_prob: float = 1.0,
+        frame_stack: int = FRAME_STACK_SIZE,
     ) -> None:
         self.partner_type = partner_type
         self.partner_prob = partner_prob
+        self.frame_stack = frame_stack
         super().__init__(
             base_env,
             reward_shaping_factor=reward_shaping_factor,
@@ -82,11 +84,15 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
     def _setup_observation_space(self, agents: list[str]) -> None:
         super()._setup_observation_space(agents)
         single_frame_space = self.ppo_observation_space
-        self.ppo_observation_space = gymnasium.spaces.Box(
-            low=np.concatenate([single_frame_space.low] * FRAME_STACK_SIZE, axis=-1),
-            high=np.concatenate([single_frame_space.high] * FRAME_STACK_SIZE, axis=-1),
-            dtype=single_frame_space.dtype,
-        )
+        k = getattr(self, "frame_stack", FRAME_STACK_SIZE)
+        if k > 1:
+            self.ppo_observation_space = gymnasium.spaces.Box(
+                low=np.concatenate([single_frame_space.low] * k, axis=-1),
+                high=np.concatenate([single_frame_space.high] * k, axis=-1),
+                dtype=single_frame_space.dtype,
+            )
+        else:
+            self.ppo_observation_space = single_frame_space
         self.greedy_observation_space = gymnasium.spaces.Box(
             low=-1.0, high=1.0, shape=(1,), dtype=np.float32
         )
@@ -169,21 +175,26 @@ class OvercookedPartnerMultiAgent(OvercookedMultiAgent):
         obs = super().reset(regen_mdp=regen_mdp)
         # Reset also runs during the superclass constructor. Rebuild histories so
         # no frames survive an episode boundary or a change in partner/seat.
-        self._ppo_frame_buffers: dict[str, deque[np.ndarray]] = {
-            agent_id: deque([frame] * FRAME_STACK_SIZE, maxlen=FRAME_STACK_SIZE)
-            for agent_id, frame in obs.items()
-            if agent_id.startswith("ppo")
-        }
-        for agent_id, frames in self._ppo_frame_buffers.items():
-            obs[agent_id] = np.concatenate(frames, axis=-1)
+        k = getattr(self, "frame_stack", FRAME_STACK_SIZE)
+        if k > 1:
+            self._ppo_frame_buffers: dict[str, deque[np.ndarray]] = {
+                agent_id: deque([frame] * k, maxlen=k)
+                for agent_id, frame in obs.items()
+                if agent_id.startswith("ppo")
+            }
+            for agent_id, frames in self._ppo_frame_buffers.items():
+                obs[agent_id] = np.concatenate(frames, axis=-1)
+        else:
+            self._ppo_frame_buffers = {}
         self._update_worker_context()
         return obs
 
     def step(self, action_dict: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
         obs, rewards, dones, infos = super().step(action_dict)
-        for agent_id, frames in self._ppo_frame_buffers.items():
-            frames.append(obs[agent_id])
-            # Oldest to newest; only PPO observations contain temporal history.
-            obs[agent_id] = np.concatenate(frames, axis=-1)
+        if getattr(self, "frame_stack", FRAME_STACK_SIZE) > 1:
+            for agent_id, frames in self._ppo_frame_buffers.items():
+                frames.append(obs[agent_id])
+                # Oldest to newest; only PPO observations contain temporal history.
+                obs[agent_id] = np.concatenate(frames, axis=-1)
         self._update_worker_context()
         return obs, rewards, dones, infos
