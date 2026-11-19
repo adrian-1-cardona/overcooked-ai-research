@@ -1,1 +1,12 @@
-{"status": "training", "recipe": "ppo_greedy", "layout": "all_layouts", "current_layout": "asymmetric_advantages", "layout_index": 2, "total_layouts": 5, "current_iter": 150, "total_iters": 500, "reward_mean": 12.5, "percent": 30.0, "eta_seconds": 700}
+{
+  "status": "completed",
+  "recipe": "ppo_sp",
+  "layout": "all_layouts",
+  "current_layout": "all_layouts",
+  "current_iter": 3250,
+  "total_iters": 3250,
+  "reward_mean": 262.57,
+  "percent": 100.0,
+  "eta_seconds": 0,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_new_self"
+}
