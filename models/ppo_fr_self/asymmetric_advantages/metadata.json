@@ -1,0 +1,11 @@
+{
+  "recipe": "ppo_sp",
+  "layout_name": "asymmetric_advantages",
+  "partner_type": "ppo",
+  "partner_prob": 0.0,
+  "use_lstm": true,
+  "current_iter": 650,
+  "total_iters": 650,
+  "reward_mean": 443.65,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_fr_self/asymmetric_advantages/checkpoint_000650"
+}

@@ -62,10 +62,14 @@ LAYOUT_TO_ASSET_NAME: dict[str, str] = {
 
 # Trainer cache so loading PPO is only done once per layout
 _TRAINER_CACHE: dict[str, Any] = {}
+_CHECKPOINT_POLICY_CACHE: dict[str, Any] = {}
 
 
 def evict_trainer_cache(key_substr: str | None = None) -> None:
     """Evict cached trainers from memory when agents are deleted or reset."""
+    for key in list(_CHECKPOINT_POLICY_CACHE):
+        if key_substr is None or key_substr in key:
+            _CHECKPOINT_POLICY_CACHE.pop(key).get_session().close()
     if key_substr is None:
         _TRAINER_CACHE.clear()
     else:
@@ -277,7 +281,35 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
     elif agent_type_lower in ("stay", "stay agent", "idle"):
         agent = StayAgent()
 
-    elif agent_type_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning"):
+    elif agent_type_lower in ("ppo_bc", "ppo_bc_pretrain", "ppo[bc]"):
+        if is_ppo_supported(layout_name):
+            try:
+                with suppress_c_stderr():
+                    from experiments.run_pretrained_policy_comparison import bundled_checkpoint, load_trainer
+                    from human_aware_rl.rllib.rllib import get_agent_from_trainer
+                    bc_key = f"bc_{layout_name}"
+                    if bc_key not in _TRAINER_CACHE:
+                        checkpoint_path = bundled_checkpoint(layout_name, "BC")
+                        trainer = load_trainer(checkpoint_path)
+                        _TRAINER_CACHE[bc_key] = trainer
+                    trainer = _TRAINER_CACHE[bc_key]
+                    agent = get_agent_from_trainer(trainer, policy_id="ppo", agent_index=agent_index)
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                    agent.reset()
+                    agent.set_agent_index(agent_index)
+                    agent.set_mdp(mdp)
+                return agent, None
+            except Exception as e:
+                warning = f"PPO_BC load failed: {e}; using Greedy Chef."
+                agent = _create_fallback_greedy_agent(mdp, agent_index)
+                return agent, warning
+        else:
+            warning = f"PPO_BC is not bundled for '{layout_name}'; using Greedy Chef."
+            agent = _create_fallback_greedy_agent(mdp, agent_index)
+            return agent, warning
+
+    elif agent_type_lower in ("bc", "bc agent", "human model", "human_model", "behavior cloning", "h_proxy"):
         if is_ppo_supported(layout_name):
             try:
                 with suppress_c_stderr():
@@ -312,18 +344,30 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             return _create_fallback_greedy_agent(mdp, agent_index), warning
 
         meta_file = model_path / "metadata.json"
+        layout_target_dir = model_path / layout_name
+        has_layout_ckpts = layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*"))
+        has_direct_ckpts = any(model_path.glob("checkpoint_*"))
+        has_sub_ckpts = any(model_path.rglob("checkpoint_*"))
+
         warning = None
-        if meta_file.is_file():
+        if meta_file.is_file() or has_layout_ckpts or has_direct_ckpts or has_sub_ckpts:
             import json
-            try:
-                with open(meta_file, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-            except Exception:
-                meta = {}
+            meta = {}
+            if meta_file.is_file():
+                try:
+                    with open(meta_file, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                except Exception:
+                    meta = {}
+            elif (model_path / "training_status.json").is_file():
+                try:
+                    with open(model_path / "training_status.json", "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                except Exception:
+                    meta = {}
             recipe = meta.get("recipe", "ppo_greedy")
 
             # Check if this model was trained on all maps or has layout subdirectories
-            layout_target_dir = model_path / layout_name
             if layout_target_dir.is_dir() and any(layout_target_dir.glob("checkpoint_*")):
                 active_model_dir = layout_target_dir
                 active_meta_file = active_model_dir / "metadata.json"
@@ -341,7 +385,7 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 if direct_ckpts:
                     active_model_dir = model_path
                     layout = meta.get("layout_name", layout_name)
-                    if layout not in ("all_layouts", "all_maps", layout_name):
+                    if layout not in ("all_layouts", "all_maps", "all_layouts_padded", "all_padded", "padded_all", layout_name):
                         try:
                             trained_shape = OvercookedGridworld.from_layout_name(layout).shape
                             current_shape = mdp.shape
@@ -371,27 +415,14 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
 
             try:
                 with suppress_c_stderr():
-                    from training.train_agent import build_trainer
-                    from human_aware_rl.rllib.rllib import RlLibAgent
+                    from training.checkpoint_policy import load_checkpoint_policy, agent_from_policy
 
-                    trainer_key = f"{str(model_path.resolve())}_{layout}"
-                    if trainer_key not in _TRAINER_CACHE:
-                        partner_type = meta.get("partner_type", "greedy")
-                        partner_prob = meta.get("partner_prob", None)
-                        trainer, _ = build_trainer(
-                            recipe=recipe,
-                            layout_name=layout,
-                            partner_type=partner_type,
-                            partner_prob=partner_prob,
-                            num_workers=0,
-                        )
-                        trainer.restore(str(ckpt_files[0]))
-                        _TRAINER_CACHE[trainer_key] = trainer
-
-                    trainer = _TRAINER_CACHE[trainer_key]
-                    policy = trainer.get_policy("ppo")
-                    featurize_fn = lambda state, debug=False: mdp.lossless_state_encoding(state, 400)
-                    agent = RlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
+                    checkpoint_key = str(ckpt_files[0].resolve())
+                    if checkpoint_key not in _CHECKPOINT_POLICY_CACHE:
+                        _CHECKPOINT_POLICY_CACHE[checkpoint_key] = load_checkpoint_policy(ckpt_files[0])
+                    policy = _CHECKPOINT_POLICY_CACHE[checkpoint_key]
+                    inference_env = OvercookedEnv.from_mdp(mdp, horizon=400)
+                    agent = agent_from_policy(policy, agent_index, inference_env)
                     agent.set_agent_index(agent_index)
                     agent.set_mdp(mdp)
                     agent.reset()
@@ -419,6 +450,58 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
                 return _create_fallback_greedy_agent(mdp, agent_index), warning
 
     else:
+        # Check aliases for bracketed naming conventions
+        norm = agent_type.lower().replace(" ", "").replace("_", "")
+        if norm in ("ppo[fr,self]", "ppofrself", "frself", "ppo[self,fr]"):
+            target = REPO_ROOT / 'models' / 'ppo_fr_self'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[fr,bc]", "ppofrbc", "frbc", "ppo[bc,fr]"):
+            target = REPO_ROOT / 'models' / 'ppo_fr_bc'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("bc", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[fr,self,greedy]", "ppo[self,greedy,fr]", "ppofrselfgreedy", "pposelfgreedyfr", "fr[self,greedy]"):
+            target = REPO_ROOT / 'models' / 'frppovgreedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[fr,greedy]", "ppofrgreedy", "fr[greedy]"):
+            target = REPO_ROOT / 'models' / 'frgreedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return _create_fallback_greedy_agent(mdp, agent_index), None
+        elif norm in ("ppo[self,greedy]", "pposelfgreedy"):
+            target = REPO_ROOT / 'models' / 'ppo_v_greedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[greedy]", "ppogreedy"):
+            target = REPO_ROOT / 'models' / 'ppo_greedy'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return _create_fallback_greedy_agent(mdp, agent_index), None
+        elif norm in ("ppo[new]", "pponew", "ppo[new,self]", "pponewself", "ppo_new", "ppo_new_self", "ppo[newself]"):
+            target = REPO_ROOT / 'models' / 'ppo_new_self'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("uc", "universalchef", "ppo[uc]", "ppouc", "ppo_uc", "ppo[padded,all]", "ppopaddedall", "ppopadded", "ppo_padded", "ppo_padded_all", "padded_all"):
+            target = REPO_ROOT / 'models' / 'ppo_padded_all'
+            if target.is_dir():
+                return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[self]", "ppoself", "ppo_sp", "pposp", "ppo_pretrain"):
+            return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+        elif norm in ("ppo[bc]", "ppobc", "ppo_bc", "ppo_bc_pretrain"):
+            return create_agent("ppo_bc", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+
+        # Check if agent_type matches any display label from get_custom_trained_agents()
+        for label, val in get_custom_trained_agents():
+            if agent_type.lower() == label.lower():
+                return create_agent(val, agent_index=agent_index, mdp=mdp, layout_name=layout_name)
+
         # Check if agent_type corresponds to an entry in AgentDatabase or a folder in models/
         models_dir = REPO_ROOT / "models"
         resolved_path = None
@@ -448,44 +531,91 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
 
 
 def get_custom_trained_agents() -> list[tuple[str, str]]:
-    """Scan models/ directory for custom trained agent checkpoints."""
+    """Scan models/, results/, and AgentDatabase for custom trained agent checkpoints."""
+    from gui.agent_database import AgentDatabase, _is_agent_checkpoint_dir
+    records = AgentDatabase.load()
+
+    seen_paths: set[str] = set()
+    candidate_paths: list[Path] = []
+
+    # 1. From database records
+    for r in records:
+        ckpt_path_str = r.get("checkpoint_path")
+        if ckpt_path_str:
+            p = Path(ckpt_path_str)
+            if p.exists() and _is_agent_checkpoint_dir(p):
+                candidate_paths.append(p)
+
+    # 2. From models/ directory directly
     models_dir = REPO_ROOT / "models"
-    if not models_dir.is_dir():
-        return []
+    if models_dir.is_dir():
+        for p in sorted(models_dir.iterdir()):
+            if _is_agent_checkpoint_dir(p):
+                candidate_paths.append(p)
+
+    # 3. From results/ directory
+    results_dir = REPO_ROOT / "results"
+    if results_dir.is_dir():
+        for p in sorted(results_dir.iterdir()):
+            if not p.is_dir() or p.name.startswith("."):
+                continue
+            if _is_agent_checkpoint_dir(p):
+                candidate_paths.append(p)
+            try:
+                for sub in sorted(p.iterdir()):
+                    if _is_agent_checkpoint_dir(sub):
+                        candidate_paths.append(sub)
+            except Exception:
+                pass
 
     results: list[tuple[str, str]] = []
-    for p in sorted(models_dir.iterdir()):
-        if not p.is_dir() or p.name.startswith("."):
+    for p in candidate_paths:
+        resolved = str(p.resolve())
+        if resolved in seen_paths:
             continue
-        has_checkpoint = (
-            any(p.glob("checkpoint_*"))
-            or any(p.rglob("checkpoint_*"))
-            or (p / "config.pkl").is_file()
-            or (p / "metadata.json").is_file()
-        )
-        if has_checkpoint:
-            name = p.name
-            meta_file = p / "metadata.json"
-            is_all_layouts = False
-            if meta_file.is_file():
-                try:
-                    import json
-                    with open(meta_file, "r", encoding="utf-8") as f:
-                        meta = json.load(f)
-                    if meta.get("layout_name") in ("all_layouts", "all_maps"):
-                        is_all_layouts = True
-                except Exception:
-                    pass
+        if not _is_agent_checkpoint_dir(p):
+            continue
 
-            map_tag = " (All Maps)" if is_all_layouts else ""
-            if name in ("ppo_greedy", "ppo greedy"):
-                label = f"PPO Greedy{map_tag}"
-            elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
-                label = f"PPO v Greedy{map_tag}"
-            elif "ppo_sp" in name:
-                label = f"PPO Custom SP{map_tag}"
-            else:
-                label = f"PPO ({name}){map_tag}"
-            results.append((label, f"custom:{p.resolve()}"))
+        seen_paths.add(resolved)
+        name = p.name
+        meta_file = p / "metadata.json"
+        is_all_layouts = False
+        has_multi_layouts = any((p / l).is_dir() for l in ("cramped_room", "asymmetric_advantages"))
+        if meta_file.is_file():
+            try:
+                import json
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                if meta.get("layout_name") in ("all_layouts", "all_maps"):
+                    is_all_layouts = True
+            except Exception:
+                pass
+        if has_multi_layouts:
+            is_all_layouts = True
+
+        if name in ("ppo_padded_all", "ppo_padded", "padded_all"):
+            label = "UC"
+        elif name in ("ppo_new_self", "ppo_new", "ppo_new_sp"):
+            label = "ppo[new]"
+        elif name in ("ppo_fr_self", "fr_self"):
+            label = "ppo[fr,self]"
+        elif name in ("ppo_fr_bc", "fr_bc"):
+            label = "ppo[fr,bc]"
+        elif name in ("ppo_greedy", "ppo greedy"):
+            label = "ppo[greedy]"
+        elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
+            label = "ppo[self,greedy]"
+        elif name in ("frgreedy", "fr_greedy"):
+            label = "ppo[fr,greedy]"
+        elif name in ("frppovgreedy", "fr_ppo_v_greedy", "frsp", "fr_sp"):
+            label = "ppo[fr,self,greedy]"
+        elif "ppo_sp" in name:
+            label = "ppo[self]"
+        elif "fr" in name.lower() or "stack" in name.lower():
+            clean_name = name.replace("_", " ").lower()
+            label = f"ppo[fr,{clean_name}]"
+        else:
+            label = f"ppo[{name}]"
+        results.append((label, f"custom:{resolved}"))
     return results
 

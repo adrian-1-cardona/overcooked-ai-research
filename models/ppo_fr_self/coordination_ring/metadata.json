@@ -1,0 +1,11 @@
+{
+  "recipe": "ppo_sp",
+  "layout_name": "coordination_ring",
+  "partner_type": "ppo",
+  "partner_prob": 0.0,
+  "use_lstm": true,
+  "current_iter": 650,
+  "total_iters": 650,
+  "reward_mean": 145.66,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_fr_self/coordination_ring/checkpoint_000650"
+}

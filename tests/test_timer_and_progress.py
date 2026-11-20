@@ -49,9 +49,9 @@ class TestTimerAndProgress(unittest.TestCase):
                 pass
 
     def test_initial_timer_estimate_is_accurate_prior(self):
-        # 100 iterations at 24s/iter is 2400s -> 40 minutes (0hr 40min)
-        self.assertEqual(self.app.train_eta_str, "0hr 40min")
-        self.assertEqual(self.app.train_eta_seconds, 2400)
+        # Default initialization: 1000s -> 16min 40s
+        self.assertEqual(self.app.train_eta_str, "16min 40s")
+        self.assertEqual(self.app.train_eta_seconds, 1000)
 
     def test_poll_updates_progress_and_eta_from_status_file(self):
         self.app.train_view = "active"
@@ -75,25 +75,26 @@ class TestTimerAndProgress(unittest.TestCase):
         self.assertEqual(self.app.train_progress_cur, 10)
         self.assertEqual(self.app.train_progress_total, 100)
         self.assertEqual(self.app.train_eta_seconds, 1800)
-        self.assertEqual(self.app.train_eta_str, "0hr 30min")
+        self.assertEqual(self.app.train_eta_str, "30min 00s")
 
     def test_smooth_live_countdown_between_polls(self):
+        from unittest.mock import patch
+
         self.app.train_view = "active"
         self.app.train_eta_seconds = 600  # 10 minutes
-        # Simulate last poll 65 seconds ago
-        self.app.train_last_poll_time = time.time() - 65
+        # Simulate last poll exactly 65 seconds ago
+        fixed_now = 1000.0
+        self.app.train_last_poll_time = fixed_now - 65.0
 
         # Empty status file or no new update
         if STATUS_FILE.is_file():
             STATUS_FILE.unlink()
 
-        self.app._poll_training_progress()
+        with patch("time.time", return_value=fixed_now):
+            self.app._poll_training_progress()
 
-        # 600 - 65 = 535 seconds = 8 minutes remaining
-        hrs = 535 // 3600
-        mins = (535 % 3600) // 60
-        self.assertEqual(self.app.train_eta_str, f"{hrs}hr {mins}min")
-        self.assertEqual(mins, 8)
+        # 600 - 65 = 535 seconds = 8 minutes 55 seconds remaining
+        self.assertEqual(self.app.train_eta_str, "8min 55s")
 
     def test_completion_sets_eta_to_zero(self):
         self.app.train_view = "active"
@@ -113,7 +114,7 @@ class TestTimerAndProgress(unittest.TestCase):
         self.app._poll_training_progress()
 
         self.assertEqual(self.app.train_view, "complete")
-        self.assertEqual(self.app.train_eta_str, "0hr 0min")
+        self.assertEqual(self.app.train_eta_str, "0s")
         self.assertEqual(self.app.train_eta_seconds, 0)
 
 

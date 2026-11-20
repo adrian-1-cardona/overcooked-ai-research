@@ -1,1 +1,1 @@
-"""Overcooked-AI Interactive Runner GUI Package."""
+"""Overcooked-AI Interactive GUI Package."""

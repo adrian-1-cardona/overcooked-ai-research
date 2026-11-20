@@ -29,9 +29,14 @@ class TestRecipeDropdown(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        pygame.quit()
         from gui.agent_manager import evict_trainer_cache
         evict_trainer_cache()
+        try:
+            import ray
+            if ray.is_initialized():
+                ray.shutdown()
+        except Exception:
+            pass
 
     def setUp(self):
         self.app = OvercookedApp(initial_layout="cramped_room", horizon=50, fps=30)

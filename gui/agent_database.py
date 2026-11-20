@@ -24,6 +24,32 @@ MODELS_DIR = REPO_ROOT / "models"
 REGISTRY_FILE = MODELS_DIR / "registry.json"
 
 
+BENCHMARK_LAYOUT_NAMES = (
+    "cramped_room",
+    "asymmetric_advantages",
+    "coordination_ring",
+    "forced_coordination",
+    "counter_circuit_o_1order",
+)
+
+
+def _is_agent_checkpoint_dir(p: Path) -> bool:
+    """Check if directory represents a concrete trained agent checkpoint collection."""
+    if not p.is_dir() or p.name.startswith("."):
+        return False
+    has_meta = (p / "metadata.json").is_file()
+    has_config = (p / "config.pkl").is_file()
+    has_direct_ckpt = any(d.is_dir() for d in p.glob("checkpoint_*"))
+    try:
+        has_layout_subdirs = any(
+            sub.is_dir() and sub.name in BENCHMARK_LAYOUT_NAMES and any(d.is_dir() for d in sub.glob("checkpoint_*"))
+            for sub in p.iterdir()
+        )
+    except Exception:
+        has_layout_subdirs = False
+    return has_meta or has_config or has_direct_ckpt or has_layout_subdirs
+
+
 class AgentDatabase:
     """Manages persistence, search, and deletion of custom trained Overcooked agents."""
 
@@ -42,25 +68,49 @@ class AgentDatabase:
             except Exception:
                 records = []
 
-        # Sync disk directories: if any model directory exists without a record, auto-register it
+        # Clean up records whose paths no longer exist on disk or are not valid agent dirs
+        valid_records: list[dict[str, Any]] = []
+        changed = False
+        for r in records:
+            p_str = r.get("checkpoint_path")
+            if p_str and Path(p_str).exists() and _is_agent_checkpoint_dir(Path(p_str)):
+                valid_records.append(r)
+            else:
+                changed = True
+        records = valid_records
+
+        # Sync disk directories: if any model directory exists in models/ or results/ without a record, auto-register it
         existing_ids = {r.get("id") for r in records}
         existing_paths = {str(Path(r.get("checkpoint_path", "")).resolve()) for r in records if r.get("checkpoint_path")}
 
-        changed = False
-        for p in sorted(MODELS_DIR.iterdir()):
-            if not p.is_dir() or p.name.startswith("."):
-                continue
-            has_checkpoint = (
-                any(p.glob("checkpoint_*"))
-                or any(p.rglob("checkpoint_*"))
-                or (p / "config.pkl").is_file()
-                or (p / "metadata.json").is_file()
-            )
+        candidate_dirs: list[Path] = []
+        if MODELS_DIR.is_dir():
+            for p in sorted(MODELS_DIR.iterdir()):
+                if _is_agent_checkpoint_dir(p):
+                    candidate_dirs.append(p)
+
+        results_dir = REPO_ROOT / "results"
+        if results_dir.is_dir():
+            for p in sorted(results_dir.iterdir()):
+                if not p.is_dir() or p.name.startswith("."):
+                    continue
+                if _is_agent_checkpoint_dir(p):
+                    candidate_dirs.append(p)
+                # Check 1 level deeper (e.g. results/frame_stacking/ppo_greedy)
+                try:
+                    for sub in sorted(p.iterdir()):
+                        if _is_agent_checkpoint_dir(sub):
+                            candidate_dirs.append(sub)
+                except Exception:
+                    pass
+
+        for p in candidate_dirs:
             resolved = str(p.resolve())
-            if has_checkpoint and resolved not in existing_paths and p.name not in existing_ids:
+            if resolved not in existing_paths and p.name not in existing_ids:
                 mtime = datetime.fromtimestamp(p.stat().st_mtime)
                 layout_val = "cramped_room"
                 recipe_val = "ppo_custom"
+                reward_mean_val = 0.0
                 meta_file = p / "metadata.json"
                 if meta_file.is_file():
                     try:
@@ -68,6 +118,7 @@ class AgentDatabase:
                             m_data = json.load(mf)
                             layout_val = m_data.get("layout_name", "cramped_room")
                             recipe_val = m_data.get("recipe", "ppo_custom")
+                            reward_mean_val = float(m_data.get("reward_mean", 0.0))
                     except Exception:
                         pass
                 records.append({
@@ -78,6 +129,7 @@ class AgentDatabase:
                     "checkpoint_path": resolved,
                     "layout": layout_val,
                     "recipe": recipe_val,
+                    "reward_mean": reward_mean_val,
                 })
                 existing_paths.add(resolved)
                 existing_ids.add(p.name)

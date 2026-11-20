@@ -107,5 +107,9 @@ def run_single_joint_step(layout_name: str = "cramped_room") -> None:
     print("=" * 60)
 
 
+def test_joint_step() -> None:
+    run_single_joint_step()
+
+
 if __name__ == "__main__":
     run_single_joint_step()

@@ -29,10 +29,23 @@ class TestTrainModeAndDB(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         pygame.init()
+        cls._registry_backup = REGISTRY_FILE.read_text(encoding="utf-8") if REGISTRY_FILE.is_file() else None
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        cls._status_backup = status_file.read_text(encoding="utf-8") if status_file.is_file() else None
 
     @classmethod
     def tearDownClass(cls):
-        pygame.quit()
+        if cls._registry_backup is not None:
+            REGISTRY_FILE.write_text(cls._registry_backup, encoding="utf-8")
+        status_file = REPO_ROOT / "results" / "training_status.json"
+        if cls._status_backup is not None:
+            status_file.write_text(cls._status_backup, encoding="utf-8")
+        try:
+            import ray
+            if ray.is_initialized():
+                ray.shutdown()
+        except Exception:
+            pass
 
     def setUp(self):
         for p in MODELS_DIR.glob("TestJeff*"):
@@ -50,14 +63,14 @@ class TestTrainModeAndDB(unittest.TestCase):
         self.app = OvercookedApp(initial_layout="cramped_room", horizon=50, fps=30)
 
     def tearDown(self):
-        for p in MODELS_DIR.glob("TestJeff*"):
+        for p in MODELS_DIR.glob("Test*"):
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
         if REGISTRY_FILE.is_file():
             try:
                 with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
                     recs = json.load(f)
-                recs = [r for r in recs if not r.get("name", "").startswith("TestJeff")]
+                recs = [r for r in recs if not r.get("name", "").startswith("Test")]
                 with open(REGISTRY_FILE, "w", encoding="utf-8") as f:
                     json.dump(recs, f, indent=2)
             except Exception:
@@ -65,12 +78,12 @@ class TestTrainModeAndDB(unittest.TestCase):
 
     def test_agent_database_crud(self):
         # 1. Add agent
-        test_dir = MODELS_DIR / "TestJeff_001"
+        test_dir = MODELS_DIR / "Test_Agent_001"
         test_dir.mkdir(parents=True, exist_ok=True)
         (test_dir / "config.pkl").write_text("dummy")
 
         rec = AgentDatabase.add_agent(
-            name="TestJeff",
+            name="Test_Agent",
             layout="cramped_room",
             checkpoint_path=test_dir,
             agent_1="ppo",
@@ -78,19 +91,19 @@ class TestTrainModeAndDB(unittest.TestCase):
             agent_2="greedy",
             agent_2_pct=50,
         )
-        self.assertEqual(rec["name"], "TestJeff")
+        self.assertEqual(rec["name"], "Test_Agent")
 
         # 2. Search
-        found = AgentDatabase.search("TestJeff")
+        found = AgentDatabase.search("Test_Agent")
         self.assertEqual(len(found), 1)
-        self.assertEqual(found[0]["name"], "TestJeff")
+        self.assertEqual(found[0]["name"], "Test_Agent")
 
         # 3. Delete
         success = AgentDatabase.delete_agent(rec["id"])
         self.assertTrue(success)
         self.assertFalse(test_dir.exists())
 
-        found_after = AgentDatabase.search("TestJeff")
+        found_after = AgentDatabase.search("Test_Agent")
         self.assertEqual(len(found_after), 0)
 
     def test_train_views_and_modal_confirmation(self):
@@ -100,7 +113,7 @@ class TestTrainModeAndDB(unittest.TestCase):
 
         # 1. Setup view (Image 4)
         self.app.train_view = "setup"
-        self.assertEqual(self.app.train_agent_name, "Jeff")
+        self.assertEqual(self.app.train_agent_name, "ppo[fr,self]")
         self.assertEqual(self.app.train_agent_1_pct, 50)
         self.assertEqual(self.app.train_agent_2_pct, 50)
 
@@ -116,7 +129,7 @@ class TestTrainModeAndDB(unittest.TestCase):
 
         # 3. Complete view (Image 2)
         self.app.train_view = "complete"
-        self.app.train_last_trained_name = "Jeff"
+        self.app.train_last_trained_name = "ppo[fr,self]"
         self.app._draw_frame()
 
         # 4. Database view (Image 1)
@@ -124,16 +137,16 @@ class TestTrainModeAndDB(unittest.TestCase):
         self.app._draw_frame()
 
         # Test "Are you sure?" modal popup
-        test_dir = MODELS_DIR / "TestJeff_Modal"
+        test_dir = MODELS_DIR / "Test_Modal_Agent"
         test_dir.mkdir(parents=True, exist_ok=True)
         (test_dir / "config.pkl").write_text("dummy")
-        rec = AgentDatabase.add_agent("TestJeff_Modal", "cramped_room", test_dir)
+        rec = AgentDatabase.add_agent("Test_Modal_Agent", "cramped_room", test_dir)
 
         # Trigger confirmation modal
-        self.app._confirm_delete_agent(rec["id"], "TestJeff_Modal")
+        self.app._confirm_delete_agent(rec["id"], "Test_Modal_Agent")
         self.assertTrue(self.app.modal_confirm.is_visible)
         self.assertEqual(self.app.modal_confirm.title, "Are you Sure?")
-        self.assertIn("TestJeff_Modal", self.app.modal_confirm.message)
+        self.assertIn("Test_Modal_Agent", self.app.modal_confirm.message)
 
         # Drawing frame renders modal on top
         self.app._draw_frame()
@@ -147,7 +160,7 @@ class TestTrainModeAndDB(unittest.TestCase):
         from training.train_agent import train
         from gui.agent_manager import create_agent, evict_trainer_cache
 
-        test_model_dir = MODELS_DIR / "TestJeff_Bot"
+        test_model_dir = MODELS_DIR / "Test_Benchmark_PPO"
         if test_model_dir.exists():
             shutil.rmtree(test_model_dir, ignore_errors=True)
 
@@ -158,12 +171,13 @@ class TestTrainModeAndDB(unittest.TestCase):
             num_iters=1,
             num_workers=0,
             out_dir=test_model_dir,
+            shutdown_at_end=False,
         )
         self.assertTrue((test_model_dir / "metadata.json").is_file())
 
         # 2. Register agent in DB
         rec = AgentDatabase.add_agent(
-            name="TestJeff_Bot",
+            name="Test_Benchmark_PPO",
             layout="cramped_room",
             checkpoint_path=test_model_dir,
             agent_1="ppo",
@@ -171,11 +185,14 @@ class TestTrainModeAndDB(unittest.TestCase):
             agent_2="greedy",
             agent_2_pct=50,
         )
-        self.assertIn("TestJeff_Bot", [r["name"] for r in AgentDatabase.search()])
+        self.assertIn("Test_Benchmark_PPO", [r["name"] for r in AgentDatabase.search()])
 
         # 3. Load agent into Overcooked and step
         agent, warn = create_agent(f"custom:{test_model_dir}", 0, self.app.mdp, "cramped_room")
         self.assertIsNotNone(agent)
+        self.assertIsNone(warn, f"Trained PPO must load without falling back: {warn}")
+        from training.frame_stacked_agent import FrameStackedRlLibAgent
+        self.assertIsInstance(agent, FrameStackedRlLibAgent)
         state = self.app.mdp.get_standard_start_state()
         action, info = agent.action(state)
         self.assertIn(action, [(-1, 0), (1, 0), (0, -1), (0, 1), (0, 0), "interact"])
@@ -189,7 +206,7 @@ class TestTrainModeAndDB(unittest.TestCase):
         self.assertFalse(test_model_dir.exists())
 
         # Assert removed from registry
-        self.assertNotIn("TestJeff_Bot", [r["name"] for r in AgentDatabase.search()])
+        self.assertNotIn("Test_Benchmark_PPO", [r["name"] for r in AgentDatabase.search()])
 
     def test_training_live_terminal_pause_and_stop_controls(self):
         from unittest.mock import MagicMock, patch
@@ -261,7 +278,7 @@ class TestTrainModeAndDB(unittest.TestCase):
         self.assertEqual(self.app.train_layout, "all_layouts")
 
         # 3. Test starting training via btn_train_start.on_click()
-        self.app.train_agent_name = "TestJeff_AllMaps"
+        self.app.train_agent_name = "Test_Benchmark_AllMaps"
         self.app.train_iters = 100
         with patch("subprocess.Popen") as mock_pop:
             mock_sub = MagicMock()

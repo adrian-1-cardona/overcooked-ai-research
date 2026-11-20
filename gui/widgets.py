@@ -1,8 +1,8 @@
 """Reusable UI widgets for the Overcooked interactive application.
 
 Includes buttons, dropdown select menus with scrolling, banners, badges, and cards,
-implemented with clean RetroUI styling (2px black borders, hard offset drop-shadows,
-retro gray surfaces, and crisp typography).
+implemented with clean styling (2px black borders, hard offset drop-shadows,
+solid surfaces, and crisp typography).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from gui.theme import (
 
 
 class UIButton:
-    """A RetroUI styled push button with hard offset shadows and tactile button-press."""
+    """A push button with hard offset shadows and tactile button-press."""
 
     def __init__(
         self,
@@ -116,7 +116,7 @@ class UIButton:
 
 
 class UIDropdown:
-    """A RetroUI styled dropdown select menu with crisp borders and scrolling popup."""
+    """A dropdown select menu with crisp borders and scrolling popup."""
 
     def __init__(
         self,
@@ -223,7 +223,7 @@ class UIDropdown:
         return False
 
     def draw(self, surface: pygame.Surface) -> None:
-        """Draw the closed/base dropdown control in RetroUI style."""
+        """Draw the closed/base dropdown control."""
         if not self.is_enabled:
             bg_col = (226, 228, 232)
             txt_col = TEXT_MUTED
@@ -255,12 +255,12 @@ class UIDropdown:
         surface.blit(arrow_surf, (self.rect.right - 20, self.rect.y + (self.rect.height - arrow_surf.get_height()) // 2))
 
     def draw_overlay(self, surface: pygame.Surface) -> None:
-        """Draw the floating popup menu with RetroUI hard shadow and borders."""
+        """Draw the floating popup menu with hard shadow and borders."""
         if not self.is_open:
             return
 
         popup_rect = self.get_popup_rect()
-        # Retro hard drop shadow
+        # Hard drop shadow
         pygame.draw.rect(surface, SHADOW_BLACK, popup_rect.move(3, 3))
 
         # Popup background & 2px border
@@ -316,7 +316,7 @@ class UIDropdown:
 
 
 class UICard:
-    """A RetroUI styled card container with hard drop shadows and 2px borders."""
+    """A card container with hard drop shadows and 2px borders."""
 
     @staticmethod
     def draw(
@@ -335,7 +335,7 @@ class UICard:
 
 
 class UIBadge:
-    """A small colorful status badge/pill with retro border."""
+    """A small colorful status badge/pill with solid border."""
 
     @staticmethod
     def draw(
@@ -364,7 +364,7 @@ class UIBadge:
 
 
 class UIBanner:
-    """A clean rectangular banner/tag styled with retro borders matching RetroUI."""
+    """A clean rectangular banner/tag styled with solid borders."""
 
     @staticmethod
     def draw(
@@ -389,7 +389,7 @@ class UIBanner:
 
 
 class UISwitchbar:
-    """A segmented tab switchbar in RetroUI style ([ Live Match | Matrix Test ])."""
+    """A segmented tab switchbar ([ Live Match | Matrix Test ])."""
 
     def __init__(
         self,
@@ -453,7 +453,7 @@ class UISwitchbar:
 
 
 class UICheckbox:
-    """A RetroUI styled toggle checkbox with hard shadow and pixel box."""
+    """A toggle checkbox with hard shadow and pixel box."""
 
     def __init__(
         self,
@@ -483,13 +483,13 @@ class UICheckbox:
         box_size = 18
         box_rect = pygame.Rect(self.rect.x, self.rect.y + (self.rect.height - box_size) // 2, box_size, box_size)
 
-        # Retro hard drop shadow
+        # Hard drop shadow
         pygame.draw.rect(surface, SHADOW_BLACK, box_rect.move(2, 2))
         pygame.draw.rect(surface, (255, 255, 255), box_rect)
         pygame.draw.rect(surface, BORDER_BLACK, box_rect, width=2)
 
         if self.checked:
-            # Retro solid black square pip
+            # Solid black square pip
             pip_rect = pygame.Rect(box_rect.x + 4, box_rect.y + 4, 10, 10)
             pygame.draw.rect(surface, (0, 0, 0), pip_rect)
 
@@ -500,7 +500,7 @@ class UICheckbox:
 
 
 class UITextInput:
-    """A RetroUI single-line text input field."""
+    """A single-line text input field."""
 
     def __init__(
         self,
@@ -564,7 +564,7 @@ class UITextInput:
 
 
 class UISlider:
-    """A stepped percentage slider with RetroUI hatched fill and tick marks."""
+    """A stepped percentage slider with hatched fill and tick marks."""
 
     def __init__(
         self,
@@ -619,7 +619,7 @@ class UISlider:
         if fill_w > 0:
             fill_rect = pygame.Rect(self.rect.x, self.rect.y, fill_w, self.rect.height)
             pygame.draw.rect(surface, self.fill_color, fill_rect)
-            # Retro hatching pattern matching wireframe
+            # Hatching pattern matching wireframe
             for x in range(self.rect.x + 4, self.rect.x + fill_w, 8):
                 pygame.draw.line(surface, (220, 38, 38), (x, self.rect.bottom - 2), (min(self.rect.x + fill_w, x + 6), self.rect.y + 2), width=1)
 
@@ -642,7 +642,7 @@ class UISlider:
 
 
 class UIModalConfirm:
-    """A RetroUI Confirmation Modal popup (Are you Sure?)."""
+    """A Confirmation Modal popup (Are you Sure?)."""
 
     def __init__(
         self,

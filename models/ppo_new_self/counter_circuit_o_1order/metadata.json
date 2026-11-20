@@ -1,0 +1,12 @@
+{
+  "recipe": "ppo_sp",
+  "layout_name": "counter_circuit_o_1order",
+  "partner_type": "ppo",
+  "partner_prob": 0.0,
+  "use_lstm": true,
+  "frame_stack": 1,
+  "current_iter": 650,
+  "total_iters": 650,
+  "reward_mean": 51.8,
+  "checkpoint_dir": "/Users/adriancardina/Desktop/research/models/ppo_new_self/counter_circuit_o_1order/checkpoint_000650"
+}
