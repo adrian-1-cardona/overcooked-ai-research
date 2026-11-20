@@ -326,10 +326,15 @@ class OvercookedApp:
                         name = r.get("name") or r.get("id", "agent")
                         layout = r.get("layout", "")
                         map_tag = " (All Maps)" if layout in ("all_layouts", "all_maps") else ""
-                        is_fr = "fr" in name.lower() or "stack" in name.lower()
-                        prefix = "fr" if is_fr else "ppo"
-                        clean_n = name.replace("fr", "").replace("ppo", "").strip("_")
-                        label = f"{prefix}[{clean_n}]" if clean_n else name
+                        if name in ("UC", "Universal Chef", "ppo_padded_all"):
+                            label = "UC"
+                        elif name in ("ppo[new]", "ppo_new_self"):
+                            label = "ppo[new]"
+                        else:
+                            is_fr = "fr" in name.lower() or "stack" in name.lower()
+                            prefix = "fr" if is_fr else "ppo"
+                            clean_n = name.replace("fr", "").replace("ppo", "").strip("_")
+                            label = f"{prefix}[{clean_n}]" if clean_n else name
                         custom.append((label, val))
                         existing_vals.add(val)
         except Exception:

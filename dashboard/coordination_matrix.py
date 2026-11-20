@@ -18,7 +18,6 @@ import streamlit as st
 
 st.set_page_config(
     page_title="Overcooked Matrix Dashboard",
-    page_icon="🍳",
     layout="wide",
 )
 
@@ -26,6 +25,8 @@ DEFAULT_CSV = Path("results/matrix.csv")
 
 # Standardized Publication Nomenclature
 DISPLAY_NAME_MAP = {
+    "ppo_padded_all": "UC",
+    "ppo_new_self": "ppo[new]",
     "ppo_fr_self": "ppo[fr,self]",
     "ppo_fr_bc": "ppo[fr,bc]",
     "ppo_sp": "ppo[self]",
@@ -42,7 +43,7 @@ def get_display_name(raw_name: str) -> str:
     return DISPLAY_NAME_MAP.get(raw_name, raw_name)
 
 
-st.title("🍳 Overcooked-AI Coordination Matrix Dashboard")
+st.title("Overcooked-AI Coordination Matrix Dashboard")
 st.markdown(
     "Customizable cross-play evaluation matrix measuring teamwork and partner adaptation. "
     "Select any custom subset of **Chef 0 (Rows)**, **Chef 1 (Columns)**, and **Layouts**."
@@ -51,7 +52,7 @@ st.markdown(
 # -----------------------------------------------------------------------------
 # Sidebar: Data & Filters
 # -----------------------------------------------------------------------------
-st.sidebar.header("📁 Data Source")
+st.sidebar.header("Data Source")
 csv_path = st.sidebar.text_input("CSV File Path", value=str(DEFAULT_CSV))
 
 if not Path(csv_path).exists():
@@ -73,7 +74,7 @@ all_display_agents = [get_display_name(a) for a in all_raw_agents]
 all_levels = sorted(raw_df["level"].unique())
 
 st.sidebar.markdown("---")
-st.sidebar.header("🎯 Filter Presets")
+st.sidebar.header("Filter Presets")
 
 preset = st.sidebar.selectbox(
     "Quick Preset",
@@ -112,7 +113,7 @@ else:
 
 # Filter controls
 st.sidebar.markdown("---")
-st.sidebar.header("🔍 Custom Matrix Dimensions")
+st.sidebar.header("Custom Matrix Dimensions")
 
 selected_rows = st.sidebar.multiselect(
     "Chef 0 (Red Hat - Rows)",
@@ -217,9 +218,9 @@ def render_matrix(
 # Main Dashboard Tabs
 # -----------------------------------------------------------------------------
 tab_labels = (
-    ["📊 Consolidated (Macro)", "⚡ Side-by-Side: fr vs ppo"]
-    + [f"🗺️ {lvl}" for lvl in selected_levels]
-    + ["📋 Raw Data"]
+    ["Consolidated (Macro)", "Side-by-Side: fr vs ppo"]
+    + [f"Layout: {lvl}" for lvl in selected_levels]
+    + ["Raw Data"]
 )
 tabs = st.tabs(tab_labels)
 
@@ -284,19 +285,19 @@ with tabs[1]:
     ].groupby("agent_1_display")["score"].mean()
 
     with col_fs:
-        st.markdown(f"#### 🚀 {fs_key}")
+        st.markdown(f"#### {fs_key}")
         for p in partner_keys:
             val = fs_scores.get(p, 0.0)
             st.metric(f"Paired with {p}", f"{val:.1f} pts")
 
     with col_base:
-        st.markdown(f"#### 📦 {base_key}")
+        st.markdown(f"#### {base_key}")
         for p in partner_keys:
             val = base_scores.get(p, 0.0)
             st.metric(f"Paired with {p}", f"{val:.1f} pts")
 
     with col_delta:
-        st.markdown("#### 📈 Frame Stack Advantage (Δ)")
+        st.markdown("#### Frame Stack Advantage (Δ)")
         for p in partner_keys:
             v_fs = fs_scores.get(p, 0.0)
             v_base = base_scores.get(p, 0.0)
@@ -340,14 +341,14 @@ for idx, lvl in enumerate(selected_levels, start=2):
 
 # 4. Raw Data Tab
 with tabs[-1]:
-    st.subheader("📋 Evaluation Trials Data")
+    st.subheader("Evaluation Trials Data")
     st.dataframe(
         df[["agent_0_display", "agent_1_display", "level", "trial", "score", "dishes", "collisions"]],
         use_container_width=True,
     )
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "📥 Download Filtered CSV",
+        "Download Filtered CSV",
         data=csv_bytes,
         file_name="filtered_matrix.csv",
         mime="text/csv",
@@ -356,10 +357,12 @@ with tabs[-1]:
 # -----------------------------------------------------------------------------
 # Scientific Notes Expander
 # -----------------------------------------------------------------------------
-with st.expander("📖 Scientific Notes & Reading Guide", expanded=False):
+with st.expander("Scientific Notes & Reading Guide", expanded=False):
     st.markdown(
         """
         - **Nomenclature Guide:**
+          - `UC`: Universal Chef PPO policy ($k=4$, 104 ch) trained across all 5 benchmark layouts on 9x5 padded observation grids.
+          - `ppo[new]`: Calibrated vanilla single-frame PPO Self-Play baseline ($k=1$, 26 ch) trained per-layout.
           - `ppo[fr,self]`: DeepMind Frame-Stack PPO policy ($k=4$, 104 ch) with Carroll et al. LSTM trained in Self-Play.
           - `ppo[fr,bc]`: DeepMind Frame-Stack PPO policy ($k=4$, 104 ch) with Carroll et al. LSTM trained alongside Human BC model.
           - `ppo[self]`: Carroll et al. (NeurIPS 2019) Self-Play recurrent LSTM baseline.

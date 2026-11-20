@@ -482,12 +482,12 @@ def create_agent(agent_type: str, agent_index: int, mdp: OvercookedGridworld, la
             if target.is_dir():
                 return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
             return _create_fallback_greedy_agent(mdp, agent_index), None
-        elif norm in ("ppo[new,self]", "pponewself", "pponew", "ppo_new", "ppo_new_self"):
+        elif norm in ("ppo[new]", "pponew", "ppo[new,self]", "pponewself", "ppo_new", "ppo_new_self", "ppo[newself]"):
             target = REPO_ROOT / 'models' / 'ppo_new_self'
             if target.is_dir():
                 return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
             return create_agent("ppo_sp", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
-        elif norm in ("ppo[padded,all]", "ppopaddedall", "ppopadded", "ppo_padded", "ppo_padded_all", "padded_all"):
+        elif norm in ("uc", "universalchef", "ppo[uc]", "ppouc", "ppo_uc", "ppo[padded,all]", "ppopaddedall", "ppopadded", "ppo_padded", "ppo_padded_all", "padded_all"):
             target = REPO_ROOT / 'models' / 'ppo_padded_all'
             if target.is_dir():
                 return create_agent(f"custom:{target.resolve()}", agent_index=agent_index, mdp=mdp, layout_name=layout_name)
@@ -593,7 +593,15 @@ def get_custom_trained_agents() -> list[tuple[str, str]]:
         if has_multi_layouts:
             is_all_layouts = True
 
-        if name in ("ppo_greedy", "ppo greedy"):
+        if name in ("ppo_padded_all", "ppo_padded", "padded_all"):
+            label = "UC"
+        elif name in ("ppo_new_self", "ppo_new", "ppo_new_sp"):
+            label = "ppo[new]"
+        elif name in ("ppo_fr_self", "fr_self"):
+            label = "ppo[fr,self]"
+        elif name in ("ppo_fr_bc", "fr_bc"):
+            label = "ppo[fr,bc]"
+        elif name in ("ppo_greedy", "ppo greedy"):
             label = "ppo[greedy]"
         elif name in ("ppo_v_greedy", "ppo v greedy", "ppo_50_50"):
             label = "ppo[self,greedy]"

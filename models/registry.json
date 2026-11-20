@@ -1,7 +1,7 @@
 [
   {
     "id": "ppo_padded_all",
-    "name": "ppo_padded_all",
+    "name": "UC",
     "date_trained": "11/19/2026",
     "time_trained": "09:47",
     "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_padded_all",
@@ -15,7 +15,7 @@
   },
   {
     "id": "ppo_new_self",
-    "name": "ppo_new_self",
+    "name": "ppo[new]",
     "date_trained": "11/19/2026",
     "time_trained": "03:06",
     "checkpoint_path": "/Users/adriancardina/Desktop/research/models/ppo_new_self",
